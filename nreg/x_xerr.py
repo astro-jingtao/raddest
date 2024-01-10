@@ -8,7 +8,7 @@ import pandas as pd
 import optax
 from pzflow import Flow
 
-from .tools import get_ext_w, neg_log_plus, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac
+from .tools import get_ext_w, neg_log_plus, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv
 
 
 def nf_fit_frame(x_ext,
@@ -42,8 +42,8 @@ def nf_fit_frame(x_ext,
                     stuck_num += 1
                     if stuck_num > max_stuck:
                         break
-                elif jnp.abs(_loss - loss_best) < jnp.abs(
-                        stuck_frac * loss_best):
+                elif jnp.abs(_loss - loss_best) < jnp.abs(stuck_frac *
+                                                          loss_best):
                     stuck_num += 1
                     loss_best = _loss
                     if stuck_num > max_stuck:
@@ -61,6 +61,7 @@ def construct_nf_fit_func(optimizer, flow, x_min, x_max, x_err_min, x_err_max):
     x_min, x_max, x_err_min, x_err_max are also for transformed value
     the jacobian of transformation is included in the weight, w
     '''
+
     @jit
     def gaussian_nf(params, x_ext, x_err_ext, w):
         s1, s2 = x_ext.shape
@@ -132,6 +133,7 @@ def construct_x_xerr_w(x_obs,
 
     return x_ext, x_err_ext, w
 
+
 # TODO: Tweedie's formula
 def flow_params_init(x_obs,
                      x_err,
@@ -164,6 +166,7 @@ def flow_params_init(x_obs,
     return flow, params
 
 
+# TODO: give trans_params
 def nf_fit_trans_neglogplus(x_obs,
                             x_err,
                             *,
@@ -259,8 +262,8 @@ def gen_xobs_trans(flow,
     else:
         x, x_err = trans_func_inv(x_all, x_err_all, trans_params)
 
-    is_in_range = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (x_err <
-                                                                     x_err_max)
+    is_in_range = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (
+        x_err < x_err_max)
 
     x = x[is_in_range][:N]
     x_err = x_err[is_in_range][:N]
@@ -290,5 +293,43 @@ def gen_xobs_trans_neglogplus(flow,
                           x_err_min,
                           x_err_max,
                           trans_func_inv=trans_neglogplus_inv,
+                          trans_params=trans_params,
+                          return_numpy=return_numpy)
+
+
+def gen_xobs_trans_neglogplus_shift(flow,
+                                    N,
+                                    x_min,
+                                    x_max,
+                                    x_err_min,
+                                    x_err_max,
+                                    trans_params,
+                                    return_numpy=False):
+    return gen_xobs_trans(flow,
+                          N,
+                          x_min,
+                          x_max,
+                          x_err_min,
+                          x_err_max,
+                          trans_func_inv=trans_neglogplus_xshift_inv,
+                          trans_params=trans_params,
+                          return_numpy=return_numpy)
+
+
+def gen_xobs_trans_shift_neglogplus(flow,
+                                    N,
+                                    x_min,
+                                    x_max,
+                                    x_err_min,
+                                    x_err_max,
+                                    trans_params,
+                                    return_numpy=False):
+    return gen_xobs_trans(flow,
+                          N,
+                          x_min,
+                          x_max,
+                          x_err_min,
+                          x_err_max,
+                          trans_func_inv=trans_xshift_neglogplus_inv,
                           trans_params=trans_params,
                           return_numpy=return_numpy)
