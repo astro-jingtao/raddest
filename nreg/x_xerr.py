@@ -297,7 +297,7 @@ def gen_xobs_trans_neglogplus(flow,
                           return_numpy=return_numpy)
 
 
-def gen_xobs_trans_neglogplus_shift(flow,
+def gen_xobs_trans_neglogplus_xshift(flow,
                                     N,
                                     x_min,
                                     x_max,
@@ -305,6 +305,8 @@ def gen_xobs_trans_neglogplus_shift(flow,
                                     x_err_max,
                                     trans_params,
                                     return_numpy=False):
+    # neglogplus_xshift
+    # log(x/x_median + 1) + shift   
     return gen_xobs_trans(flow,
                           N,
                           x_min,
@@ -316,7 +318,7 @@ def gen_xobs_trans_neglogplus_shift(flow,
                           return_numpy=return_numpy)
 
 
-def gen_xobs_trans_shift_neglogplus(flow,
+def gen_xobs_trans_xshift_neglogplus(flow,
                                     N,
                                     x_min,
                                     x_max,
@@ -324,6 +326,8 @@ def gen_xobs_trans_shift_neglogplus(flow,
                                     x_err_max,
                                     trans_params,
                                     return_numpy=False):
+    # xshift_neglogplus
+    # log((x + shift)/x_median + 1)
     return gen_xobs_trans(flow,
                           N,
                           x_min,

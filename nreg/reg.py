@@ -6,7 +6,7 @@ from jax.scipy.stats import gaussian_kde
 
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 from .tools import neg_log_plus, get_x_err_ext, get_p_flow, get_ext_w_2d, trans_neglogplus, trans_neglogplus_dx, trans_neglogplus_jac, trans_neglogplus_inv
-from .x_xerr import gen_xobs, gen_xobs_trans
+from .x_xerr import gen_xobs_trans
 
 
 def construct_trainer(log_likelihood, step):
@@ -297,138 +297,138 @@ def gen_xy_obs_trans_neglogplus_loglinear(flowx,
 # —————————————————————— old code ——————————————————————
 
 
-def get_xyw_lognorm(x_obs,
-                    y_obs,
-                    x_err,
-                    y_err,
-                    flowx,
-                    flowy,
-                    x_median,
-                    x_err_median,
-                    y_median,
-                    y_err_median,
-                    x_trans=False,
-                    y_trans=False,
-                    n=21,
-                    x_shift=0,
-                    y_shift=0):
-    """
-    w = w_ghq * p(x, x_err) * p(y_err|y) / y / ln(10)
-    x = x_nf + x_shift
-    y = y_nf + y_shift
-    """
-    ghq = GaussHermiteQuadrature(dim=2, nodes=n)
-    x = ghq.X[:, 0].reshape(1, -1)
-    y = ghq.X[:, 1].reshape(1, -1)
+# def get_xyw_lognorm(x_obs,
+#                     y_obs,
+#                     x_err,
+#                     y_err,
+#                     flowx,
+#                     flowy,
+#                     x_median,
+#                     x_err_median,
+#                     y_median,
+#                     y_err_median,
+#                     x_trans=False,
+#                     y_trans=False,
+#                     n=21,
+#                     x_shift=0,
+#                     y_shift=0):
+#     """
+#     w = w_ghq * p(x, x_err) * p(y_err|y) / y / ln(10)
+#     x = x_nf + x_shift
+#     y = y_nf + y_shift
+#     """
+#     ghq = GaussHermiteQuadrature(dim=2, nodes=n)
+#     x = ghq.X[:, 0].reshape(1, -1)
+#     y = ghq.X[:, 1].reshape(1, -1)
 
-    _x_ext = x_obs.reshape(-1, 1) + np.sqrt(2) * x_err.reshape(-1, 1) * x
-    _y_ext = y_obs.reshape(-1, 1) + np.sqrt(2) * y_err.reshape(-1, 1) * y
+#     _x_ext = x_obs.reshape(-1, 1) + np.sqrt(2) * x_err.reshape(-1, 1) * x
+#     _y_ext = y_obs.reshape(-1, 1) + np.sqrt(2) * y_err.reshape(-1, 1) * y
 
-    _x_err_ext = get_x_err_ext(x_err, n * n)
-    _y_err_ext = get_x_err_ext(y_err, n * n)
+#     _x_err_ext = get_x_err_ext(x_err, n * n)
+#     _y_err_ext = get_x_err_ext(y_err, n * n)
 
-    if x_trans:
-        x_ext = neg_log_plus((_x_ext - x_shift) / x_median)
-        x_err_ext = neg_log_plus(_x_err_ext / x_err_median)
-    else:
-        x_ext = _x_ext
-        x_err_ext = _x_err_ext
+#     if x_trans:
+#         x_ext = neg_log_plus((_x_ext - x_shift) / x_median)
+#         x_err_ext = neg_log_plus(_x_err_ext / x_err_median)
+#     else:
+#         x_ext = _x_ext
+#         x_err_ext = _x_err_ext
 
-    if y_trans:
-        y_ext = neg_log_plus((_y_ext - y_shift) / y_median)
-        y_err_ext = neg_log_plus(_y_err_ext / y_err_median)
-    else:
-        y_ext = _y_ext
-        y_err_ext = _y_err_ext
+#     if y_trans:
+#         y_ext = neg_log_plus((_y_ext - y_shift) / y_median)
+#         y_err_ext = neg_log_plus(_y_err_ext / y_err_median)
+#     else:
+#         y_ext = _y_ext
+#         y_err_ext = _y_err_ext
 
-    s1, s2 = x_ext.shape
-    if x_trans:
-        px_xerr = jnp.where(
-            (_x_ext > 0) & (_y_ext > 0),
-            get_p_flow(flowx, x_ext.flatten(), x_err_ext.flatten()).reshape(
-                s1, s2) / (_x_ext + x_median) / (_x_err_ext + x_err_median), 0)
-    else:
-        px_xerr = jnp.where((_x_ext > 0) & (_y_ext > 0),
-                            get_p_flow(flowx, x_ext.flatten(),
-                                       x_err_ext.flatten()).reshape(s1, s2), 0)
+#     s1, s2 = x_ext.shape
+#     if x_trans:
+#         px_xerr = jnp.where(
+#             (_x_ext > 0) & (_y_ext > 0),
+#             get_p_flow(flowx, x_ext.flatten(), x_err_ext.flatten()).reshape(
+#                 s1, s2) / (_x_ext + x_median) / (_x_err_ext + x_err_median), 0)
+#     else:
+#         px_xerr = jnp.where((_x_ext > 0) & (_y_ext > 0),
+#                             get_p_flow(flowx, x_ext.flatten(),
+#                                        x_err_ext.flatten()).reshape(s1, s2), 0)
 
-    y_sample = flowy.sample(10000)['x_obs'].to_numpy()
-    kernel_y = gaussian_kde(y_sample)
+#     y_sample = flowy.sample(10000)['x_obs'].to_numpy()
+#     kernel_y = gaussian_kde(y_sample)
 
-    py_yerr = jnp.where((_x_ext > 0) & (_y_ext > 0),
-                        get_p_flow(flowy, y_ext.flatten(),
-                                   y_err_ext.flatten()).reshape(s1, s2), 0)
-    py = kernel_y.pdf(y_ext.flatten()).reshape(s1, s2)
+#     py_yerr = jnp.where((_x_ext > 0) & (_y_ext > 0),
+#                         get_p_flow(flowy, y_ext.flatten(),
+#                                    y_err_ext.flatten()).reshape(s1, s2), 0)
+#     py = kernel_y.pdf(y_ext.flatten()).reshape(s1, s2)
 
-    eps = 1e-10
-    if y_trans:
-        wy = jnp.where((_x_ext > 0) & (_y_ext > 0),
-                       py_yerr / (py + eps) / (_y_err_ext + y_err_median), 0)
-    else:
-        wy = jnp.where((_x_ext > 0) & (_y_ext > 0), py_yerr / (py + eps), 0)
-    # replace nan with 0
-    wy = jnp.nan_to_num(wy, nan=0)
+#     eps = 1e-10
+#     if y_trans:
+#         wy = jnp.where((_x_ext > 0) & (_y_ext > 0),
+#                        py_yerr / (py + eps) / (_y_err_ext + y_err_median), 0)
+#     else:
+#         wy = jnp.where((_x_ext > 0) & (_y_ext > 0), py_yerr / (py + eps), 0)
+#     # replace nan with 0
+#     wy = jnp.nan_to_num(wy, nan=0)
 
-    # 应该有个 1/pi 的系数，但对结果没有影响
-    w = ghq.W.reshape(1, -1) * px_xerr / _y_ext / np.log(10) * wy
+#     # 应该有个 1/pi 的系数，但对结果没有影响
+#     w = ghq.W.reshape(1, -1) * px_xerr / _y_ext / np.log(10) * wy
 
-    w = jnp.where((_x_ext < x_obs.max()) & (_y_ext < y_obs.max()), w, 0)
+#     w = jnp.where((_x_ext < x_obs.max()) & (_y_ext < y_obs.max()), w, 0)
 
-    return jnp.array(_x_ext), jnp.array(_y_ext), jnp.array(w)
+#     return jnp.array(_x_ext), jnp.array(_y_ext), jnp.array(w)
 
 
-def gen_xy_obs(flowx,
-               x_median,
-               x_err_median,
-               x_max,
-               xerr_max,
-               flowy,
-               y_median,
-               y_err_median,
-               y_max,
-               yerr_max,
-               k,
-               b,
-               sig,
-               n=1000,
-               x_trans=False,
-               y_trans=False,
-               x_shift=0,
-               y_shift=0):
+# def gen_xy_obs(flowx,
+#                x_median,
+#                x_err_median,
+#                x_max,
+#                xerr_max,
+#                flowy,
+#                y_median,
+#                y_err_median,
+#                y_max,
+#                yerr_max,
+#                k,
+#                b,
+#                sig,
+#                n=1000,
+#                x_trans=False,
+#                y_trans=False,
+#                x_shift=0,
+#                y_shift=0):
 
-    if x_trans:
-        x_gen, x_err_gen, x_obs_gen = gen_xobs_trans(flowx,
-                                                     n,
-                                                     x_median,
-                                                     x_err_median,
-                                                     x_min=0,
-                                                     x_max=x_max,
-                                                     xerr_min=0,
-                                                     xerr_max=xerr_max,
-                                                     x_shift=x_shift)
-    else:
-        x_gen, x_err_gen, x_obs_gen = gen_xobs(flowx, n)
+#     if x_trans:
+#         x_gen, x_err_gen, x_obs_gen = gen_xobs_trans(flowx,
+#                                                      n,
+#                                                      x_median,
+#                                                      x_err_median,
+#                                                      x_min=0,
+#                                                      x_max=x_max,
+#                                                      xerr_min=0,
+#                                                      xerr_max=xerr_max,
+#                                                      x_shift=x_shift)
+#     else:
+#         x_gen, x_err_gen, x_obs_gen = gen_xobs(flowx, n)
 
-    if y_trans:
-        y_gen_kdt, y_err_gen_kdt, _ = gen_xobs_trans(flowy,
-                                                     n,
-                                                     y_median,
-                                                     y_err_median,
-                                                     x_min=0,
-                                                     x_max=y_max,
-                                                     xerr_min=0,
-                                                     xerr_max=yerr_max,
-                                                     x_shift=y_shift)
-    else:
-        y_gen_kdt, y_err_gen_kdt, _ = gen_xobs(flowy, n)
+#     if y_trans:
+#         y_gen_kdt, y_err_gen_kdt, _ = gen_xobs_trans(flowy,
+#                                                      n,
+#                                                      y_median,
+#                                                      y_err_median,
+#                                                      x_min=0,
+#                                                      x_max=y_max,
+#                                                      xerr_min=0,
+#                                                      xerr_max=yerr_max,
+#                                                      x_shift=y_shift)
+#     else:
+#         y_gen_kdt, y_err_gen_kdt, _ = gen_xobs(flowy, n)
 
-    tree = KDTree(y_gen_kdt.reshape(-1, 1))
+#     tree = KDTree(y_gen_kdt.reshape(-1, 1))
 
-    log10_y_gen = k * np.log10(x_gen) + b + np.random.normal(scale=sig, size=n)
-    y_gen = np.power(10, log10_y_gen)
+#     log10_y_gen = k * np.log10(x_gen) + b + np.random.normal(scale=sig, size=n)
+#     y_gen = np.power(10, log10_y_gen)
 
-    _, y_err_match_index = tree.query(y_gen.reshape(-1, 1))
-    y_err_gen = y_err_gen_kdt[y_err_match_index]
-    y_obs_gen = y_gen + np.random.normal(scale=y_err_gen)
+#     _, y_err_match_index = tree.query(y_gen.reshape(-1, 1))
+#     y_err_gen = y_err_gen_kdt[y_err_match_index]
+#     y_obs_gen = y_gen + np.random.normal(scale=y_err_gen)
 
-    return x_obs_gen, y_obs_gen
+#     return x_obs_gen, y_obs_gen
