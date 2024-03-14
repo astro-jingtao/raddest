@@ -74,6 +74,8 @@ def get_xyw_trans_lognorm(x_obs,
     Here x_range, x_err_range, y_range, y_err_range are for original varibles, not transformed ones.
     '''
 
+    # x, x_err | y, y_err <-> u, v
+
     _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d(
         x_obs, y_obs, x_err, y_err, n)
 
@@ -105,6 +107,7 @@ def get_xyw_trans_lognorm(x_obs,
     is_in_range = is_in_range_x & is_in_range_y
 
     s1, s2 = x_ext.shape
+    # px_xerr : w1
     if x_trans_func is None:
         px_xerr = jnp.where(
             is_in_range,
@@ -117,6 +120,8 @@ def get_xyw_trans_lognorm(x_obs,
                 s1, s2) *
             x_trans_func_jac(_x_ext, _x_err_ext, params=x_trans_params), 0)
 
+    # wy: w2
+    # TODO: just use p(y, y_err)/p(y)
     y_sample = flowy.sample(10000)['x_obs'].to_numpy()
     kernel_y = gaussian_kde(y_sample)
 
@@ -128,6 +133,7 @@ def get_xyw_trans_lognorm(x_obs,
     if y_trans_func is None:
         wy = jnp.where(is_in_range, py_yerr / (py + eps), 0)
     else:
+        # p(y_err|y) = p(v|u) * |d/dy|
         wy = jnp.where(
             is_in_range, py_yerr / (py + eps) *
             y_trans_func_dx(_y_ext, _y_err_ext, params=y_trans_params), 0)

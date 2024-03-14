@@ -1,6 +1,6 @@
 import numpy as np
-from utilize.ndtest import ks2d2s
-from utilize.Bcorner import quantile
+from ndtest.ksnd import ks2d2s
+from asa.Bcorner import quantile
 from .reg import loglinear_x2y
 from .grid_search import get_weighted_res
 
@@ -32,7 +32,7 @@ def parser(res, iargs):
     return res_arr
 
 
-def compare(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, x_obs, y_obs):
+def compare_loglinear(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, x_obs, y_obs):
     return get_ks_reg_loglinear(
         x_gen,
         x_obs_gen,
@@ -45,7 +45,7 @@ def compare(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, x_obs, y_obs)
 
 
 def gen_new_grid_mean_std(res_arr, n=10):
-    res_mean, res_std = get_weighted_res(res_arr[:, :3], res_arr[:, 4])
+    res_mean, res_std = get_weighted_res(res_arr[:, :3].T, res_arr[:, 4])
     dk = max(0.2, 2 * res_std[0])
     k_list = np.linspace(res_mean[0] - dk, res_mean[0] + dk, n)
     db = max(0.2, 2 * res_std[1])
