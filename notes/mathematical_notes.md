@@ -13,7 +13,7 @@ P(y_{err,i},\mathbf{x}_{err,i}|y,\mathbf{x})\:P(y,\mathbf{x}|\boldsymbol{\theta}
 \end{gathered}
 $$
 
-We can precalculate $w_1 = P(\mathbf{x}, \mathbf{x}_{err,i})$, $w_2 = P(y_{err,i}|y)$.
+We can precalculate $w_1 = P(\mathbf{x}_i, \mathbf{x}_{err,i})$, $w_2 = P(y_{err,i}|y_i)$.
 
 Thus, we have 
 
@@ -29,7 +29,6 @@ x, x_{err} \rightarrow u, v
 $$
 
 
-// TODO: confirm it
 
 
 The fitted NF just give $p(u, v)$, so $p(x, x_{err}) = p(u, v) |\partial (u, v)/ (x, x_{err})|$
