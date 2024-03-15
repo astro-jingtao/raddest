@@ -11,8 +11,8 @@ from pzflow import Flow
 from .tools import get_ext_w, neg_log_plus, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv
 
 
-def nf_fit_frame(x_ext,
-                 x_err_ext,
+def nf_fit_frame(u_ext,
+                 v_ext,
                  w,
                  params,
                  optimizer,
@@ -31,10 +31,9 @@ def nf_fit_frame(x_ext,
     stuck_num = 0
     loss = []
     for i in range(n_train):
-        params, opt_state = update_params(params, opt_state, x_ext, x_err_ext,
-                                          w)
+        params, opt_state = update_params(params, opt_state, u_ext, v_ext, w)
         if i % check_per_step == 0:
-            _loss = log_likelihood(params, x_ext, x_err_ext, w)
+            _loss = log_likelihood(params, u_ext, v_ext, w)
             if verbose:
                 print(f"step {i}: loss {_loss}")
             if early_stop:
@@ -55,43 +54,58 @@ def nf_fit_frame(x_ext,
     return params, loss
 
 
-def construct_nf_fit_func(optimizer, flow, x_min, x_max, x_err_min, x_err_max):
+def construct_nf_fit_func(optimizer,
+                          flow,
+                          x_min,
+                          x_max,
+                          x_err_min,
+                          x_err_max,
+                          trans_func_inv=None,
+                          trans_params=None):
     '''
-    x_ext and x_err_ext are transformed value
-    x_min, x_max, x_err_min, x_err_max are also for transformed value
+    u_ext and v_ext are transformed value
+    x_min, x_max, x_err_min, x_err_max are for original value
     the jacobian of transformation is included in the weight, w
     '''
 
+    if trans_func_inv is None:
+        # no transformation
+        trans_func_inv = lambda a, b, p: (a, b)
+
     @jit
-    def gaussian_nf(params, x_ext, x_err_ext, w):
-        s1, s2 = x_ext.shape
-        _nf_logpdf = nf_logpdf(params, x_ext.flatten(), x_err_ext.flatten())
+    def gaussian_nf(params, u_ext, v_ext, w):
+        s1, s2 = u_ext.shape
+        _nf_logpdf = nf_logpdf(params, u_ext.flatten(), v_ext.flatten())
         return logsumexp(jnp.log(w + 1e-10) + _nf_logpdf.reshape(s1, s2),
                          axis=1)
 
     @jit
-    def nf_logpdf(params, x, x_err):
-        return jnp.where((x > x_min) & (x < x_max) & (x_err > x_err_min) &
-                         (x_err < x_err_max),
-                         _nf_logpdf(params, jnp.clip(x, x_min, x_max),
-                                    jnp.clip(x_err, x_err_min,
-                                             x_err_max)), -10)
+    def nf_logpdf(params, u, v):
+        # we need inner where
+        # https://jax.readthedocs.io/en/latest/faq.html#gradients-contain-nan-where-using-where
+        x, x_err = trans_func_inv(u, v, trans_params)
+        cond = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (x_err
+                                                                  < x_err_max)
+        return jnp.where(
+            cond,
+            _nf_logpdf(params, jnp.where(cond, u, 0.5),
+                       jnp.where(cond, v, 0.5)), -10)
 
     @jit
-    def _nf_logpdf(params, x, x_err):
-        return flow._log_prob(params, jnp.c_[x, x_err],
-                              jnp.zeros(shape=(x.shape[0], 1)))
+    def _nf_logpdf(params, u, v):
+        return flow._log_prob(params, jnp.c_[u, v],
+                              jnp.zeros(shape=(u.shape[0], 1)))
 
     @jit
-    def log_likelihood(params, x_ext, x_err_ext, w):
+    def log_likelihood(params, u_ext, v_ext, w):
         # to avoid nan
-        return -jnp.mean(gaussian_nf(params, x_ext, x_err_ext, w))
+        return -jnp.mean(gaussian_nf(params, u_ext, v_ext, w))
 
     d_log_likelihood = jit(grad(log_likelihood, argnums=(0, )))
 
     @jit
-    def update_params(params, opt_state, x_ext, x_err_ext, w):
-        d_params = d_log_likelihood(params, x_ext, x_err_ext, w)[0]
+    def update_params(params, opt_state, u_ext, v_ext, w):
+        d_params = d_log_likelihood(params, u_ext, v_ext, w)[0]
         updates, opt_state = optimizer.update(d_params, opt_state, params)
         params = optax.apply_updates(params, updates)
         return params, opt_state
@@ -119,46 +133,17 @@ def construct_x_xerr_w(x_obs,
     if trans_func is None:
         u_ext = _x_ext
         v_ext = _x_err_ext
+        w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
+                      (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max), w,
+                      0)
     else:
         u_ext, v_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
-
-    w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
-                  (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max),
-                  w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
-                  0)
+        w = jnp.where(
+            (_x_ext > x_min) & (_x_ext < x_max) & (_x_err_ext > x_err_min) &
+            (_x_err_ext < x_err_max),
+            w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params), 0)
 
     return u_ext, v_ext, w
-
-
-def construct_x_xerr_w_old(x_obs,
-                           x_err,
-                           x_min,
-                           x_max,
-                           x_err_min,
-                           x_err_max,
-                           n_node=21,
-                           trans_func=None,
-                           trans_func_jac=None,
-                           trans_params=None):
-    '''
-    Here x_obs and x_err are the original value
-    x_min, x_max, x_err_min, x_err_max are for transformed value
-    '''
-
-    _x_ext, _x_err_ext, w = get_ext_w(n_node, x_obs, x_err)
-
-    if trans_func is None:
-        x_ext = _x_ext
-        x_err_ext = _x_err_ext
-    else:
-        x_ext, x_err_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
-
-    w = jnp.where((x_ext > x_min) & (x_ext < x_max) & (x_err_ext > x_err_min) &
-                  (x_err_ext < x_err_max),
-                  w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
-                  0)
-
-    return x_ext, x_err_ext, w
 
 
 # TODO: Tweedie's formula
@@ -175,13 +160,8 @@ def flow_params_init(x_obs,
         if trans_func is None:
             data_pd = pd.DataFrame({'x_obs': x_obs, 'x_err': x_err})
         else:
-            x_obs_trans, x_err_trans = trans_func(x_obs,
-                                                  x_err,
-                                                  params=trans_params)
-            data_pd = pd.DataFrame({
-                'x_obs': x_obs_trans,
-                'x_err': x_err_trans
-            })
+            u, v = trans_func(x_obs, x_err, params=trans_params)
+            data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
 
         _ = flow.train(data_pd,
                        convolve_errs=False,
@@ -217,25 +197,16 @@ def nf_fit_trans_neglogplus(x_obs,
 
     trans_params = [x_median, x_err_median]
 
-    x_min_trans, x_err_min_trans = trans_neglogplus(x_min,
-                                                    x_err_min,
-                                                    params=trans_params)
-    x_max_trans, x_err_max_trans = trans_neglogplus(x_max,
-                                                    x_err_max,
-                                                    params=trans_params)
-
-    # TODO: adopt new construct_x_xerr_w
-    x_ext, x_err_ext, w = construct_x_xerr_w(
-        x_obs,
-        x_err,
-        x_min_trans,
-        x_max_trans,
-        x_err_min_trans,
-        x_err_max_trans,
-        n_node=n_node,
-        trans_func=trans_neglogplus,
-        trans_func_jac=trans_neglogplus_jac,
-        trans_params=trans_params)
+    u_ext, v_ext, w = construct_x_xerr_w(x_obs,
+                                         x_err,
+                                         x_min,
+                                         x_max,
+                                         x_err_min,
+                                         x_err_max,
+                                         n_node=n_node,
+                                         trans_func=trans_neglogplus,
+                                         trans_func_jac=trans_neglogplus_jac,
+                                         trans_params=trans_params)
 
     flow, params = flow_params_init(x_obs,
                                     x_err,
@@ -246,11 +217,17 @@ def nf_fit_trans_neglogplus(x_obs,
                                     verbose=verbose)
 
     update_params, log_likelihood = construct_nf_fit_func(
-        optimizer, flow, x_min_trans, x_max_trans, x_err_min_trans,
-        x_err_max_trans)
+        optimizer,
+        flow,
+        x_min,
+        x_max,
+        x_err_min,
+        x_err_max,
+        trans_func_inv=trans_neglogplus_inv,
+        trans_params=trans_params)
 
-    params, loss = nf_fit_frame(x_ext,
-                                x_err_ext,
+    params, loss = nf_fit_frame(u_ext,
+                                v_ext,
                                 w,
                                 params,
                                 optimizer,
@@ -282,13 +259,13 @@ def gen_xobs_trans(flow,
     '''
 
     samples = flow.sample(2 * N, seed=0)
-    x_all = samples['x_obs'].to_numpy()
-    x_err_all = samples['x_err'].to_numpy()
+    u_all = samples['x_obs'].to_numpy()
+    v_all = samples['x_err'].to_numpy()
 
     if trans_func_inv is None:
-        x, x_err = x_all, x_err_all
+        x, x_err = u_all, v_all
     else:
-        x, x_err = trans_func_inv(x_all, x_err_all, trans_params)
+        x, x_err = trans_func_inv(u_all, v_all, trans_params)
 
     is_in_range = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (
         x_err < x_err_max)
@@ -314,6 +291,10 @@ def gen_xobs_trans_neglogplus(flow,
                               x_err_max,
                               trans_params,
                               return_numpy=False):
+    '''
+    return:
+        x_gen, x_err_gen, x_obs_gen
+    '''
     return gen_xobs_trans(flow,
                           N,
                           x_min,
