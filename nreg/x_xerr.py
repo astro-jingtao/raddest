@@ -8,7 +8,7 @@ import pandas as pd
 import optax
 from pzflow import Flow
 
-from .tools import get_ext_w, neg_log_plus, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv
+from .tools import get_ext_w, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg
 
 
 def nf_fit_frame(u_ext,
@@ -149,6 +149,10 @@ def construct_x_xerr_w(x_obs,
 # TODO: Tweedie's formula
 def flow_params_init(x_obs,
                      x_err,
+                     x_min=0,
+                     x_max=jnp.inf,
+                     x_err_min=0,
+                     x_err_max=jnp.inf,
                      flow=None,
                      trans_func=None,
                      trans_params=None,
@@ -157,10 +161,20 @@ def flow_params_init(x_obs,
 
     if flow is None:
         flow = Flow(["x_obs", "x_err"])
+        x_obs_shrink = shrink_gg(x_obs, x_err)
+
+        is_in_range = (x_obs_shrink >= x_min) & (x_obs_shrink <= x_max) & (
+            x_err >= x_err_min) & (x_err <= x_err_max)
+
         if trans_func is None:
-            data_pd = pd.DataFrame({'x_obs': x_obs, 'x_err': x_err})
+            data_pd = pd.DataFrame({
+                'x_obs': x_obs_shrink[is_in_range],
+                'x_err': x_err[is_in_range]
+            })
         else:
-            u, v = trans_func(x_obs, x_err, params=trans_params)
+            u, v = trans_func(x_obs[is_in_range],
+                              x_err[is_in_range],
+                              params=trans_params)
             data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
 
         _ = flow.train(data_pd,
@@ -184,9 +198,9 @@ def nf_fit_trans_neglogplus(x_obs,
                             verbose=False,
                             flow=None,
                             x_min=0,
-                            x_max=15,
+                            x_max=jnp.inf,
                             x_err_min=0,
-                            x_err_max=5,
+                            x_err_max=jnp.inf,
                             check_per_step=10,
                             early_stop=True,
                             max_stuck=5,
@@ -210,6 +224,10 @@ def nf_fit_trans_neglogplus(x_obs,
 
     flow, params = flow_params_init(x_obs,
                                     x_err,
+                                    x_min=x_min,
+                                    x_max=x_max,
+                                    x_err_min=x_err_min,
+                                    x_err_max=x_err_max,
                                     flow=flow,
                                     trans_func=trans_neglogplus,
                                     trans_params=trans_params,

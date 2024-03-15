@@ -206,3 +206,13 @@ def trans_neglogplus_xshift_jac(x, x_err, params):
     k_x_err = jnp.where(x_err / x_err_median > 0, 1 / (x_err + x_err_median),
                         1 / x_err_median)
     return k_x * k_x_err
+
+
+# ----
+@jit
+def shrink_gg(x_obs, x_err):
+    # Tweedie's formula when p(x_obs) is considered to be a normal distribution
+    mu = jnp.mean(x_obs)
+    sigma2 = jnp.var(x_obs)
+    B = (sigma2 - jnp.square(x_err)) / sigma2
+    return B * x_obs + (1 - B) * mu
