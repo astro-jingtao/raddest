@@ -123,13 +123,15 @@ def trans_xlog_rotation_inv(u, v, params):
     x_err = jnp.exp(-u * sin + v * cos)
     return x, x_err
 
+
 @jit
 def trans_xlog_rotation_dx():
     ...
 
+
 @jit
-def trans_xlog_rotation_jac():
-    ...
+def trans_xlog_rotation_jac(x, x_err, params):
+    return 1 / (x * x_err)
 
 
 # xshift_neglogplus

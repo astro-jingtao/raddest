@@ -111,6 +111,37 @@ def construct_x_xerr_w(x_obs,
                        trans_params=None):
     '''
     Here x_obs and x_err are the original value
+    x_min, x_max, x_err_min, x_err_max are for original value
+    '''
+
+    _x_ext, _x_err_ext, w = get_ext_w(n_node, x_obs, x_err)
+
+    if trans_func is None:
+        u_ext = _x_ext
+        v_ext = _x_err_ext
+    else:
+        u_ext, v_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
+
+    w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
+                  (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max),
+                  w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
+                  0)
+
+    return u_ext, v_ext, w
+
+
+def construct_x_xerr_w_old(x_obs,
+                           x_err,
+                           x_min,
+                           x_max,
+                           x_err_min,
+                           x_err_max,
+                           n_node=21,
+                           trans_func=None,
+                           trans_func_jac=None,
+                           trans_params=None):
+    '''
+    Here x_obs and x_err are the original value
     x_min, x_max, x_err_min, x_err_max are for transformed value
     '''
 
@@ -126,10 +157,6 @@ def construct_x_xerr_w(x_obs,
                   (x_err_ext < x_err_max),
                   w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
                   0)
-
-    # w = jnp.where(
-    #     (_x_ext > 0) & (_x_err_ext > 0),
-    #     w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params), 0)
 
     return x_ext, x_err_ext, w
 
@@ -197,6 +224,7 @@ def nf_fit_trans_neglogplus(x_obs,
                                                     x_err_max,
                                                     params=trans_params)
 
+    # TODO: adopt new construct_x_xerr_w
     x_ext, x_err_ext, w = construct_x_xerr_w(
         x_obs,
         x_err,
@@ -298,15 +326,15 @@ def gen_xobs_trans_neglogplus(flow,
 
 
 def gen_xobs_trans_neglogplus_xshift(flow,
-                                    N,
-                                    x_min,
-                                    x_max,
-                                    x_err_min,
-                                    x_err_max,
-                                    trans_params,
-                                    return_numpy=False):
+                                     N,
+                                     x_min,
+                                     x_max,
+                                     x_err_min,
+                                     x_err_max,
+                                     trans_params,
+                                     return_numpy=False):
     # neglogplus_xshift
-    # log(x/x_median + 1) + shift   
+    # log(x/x_median + 1) + shift
     return gen_xobs_trans(flow,
                           N,
                           x_min,
@@ -319,13 +347,13 @@ def gen_xobs_trans_neglogplus_xshift(flow,
 
 
 def gen_xobs_trans_xshift_neglogplus(flow,
-                                    N,
-                                    x_min,
-                                    x_max,
-                                    x_err_min,
-                                    x_err_max,
-                                    trans_params,
-                                    return_numpy=False):
+                                     N,
+                                     x_min,
+                                     x_max,
+                                     x_err_min,
+                                     x_err_max,
+                                     trans_params,
+                                     return_numpy=False):
     # xshift_neglogplus
     # log((x + shift)/x_median + 1)
     return gen_xobs_trans(flow,
