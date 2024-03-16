@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jax import jit
 from jax.scipy.stats import norm
 from numpy.polynomial.hermite import hermgauss
+from scipy.stats.qmc import MultivariateNormalQMC
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
 
@@ -39,6 +40,32 @@ def get_ext_w(n, x_obs, x_err):
     x_ext = jnp.sqrt(2) * sig * x + mu
     x_err_ext = jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
     # w 应该有个 1/sqrt(pi) 的系数，但对结果没有影响
+    return x_ext, x_err_ext, w
+
+
+def round_to_2power(x):
+    return int(2**np.ceil(np.log2(x)))
+
+
+def is_2power(x):
+    return np.log2(x) % 1 == 0
+
+
+def get_ext_w_qmc(n, x_obs, x_err):
+
+    if not is_2power(n):
+        print(f"n={n} is not a power of 2, rounding to {round_to_2power(n)}")
+        n = round_to_2power(n)
+
+    x = MultivariateNormalQMC(mean=[
+        0,
+    ], cov=[[
+        1,
+    ]]).random(n).T
+    mu, sig = get_musig_1d(x_obs, x_err)
+    x_ext = jnp.array(x * sig + mu)
+    x_err_ext = jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
+    w = jnp.ones_like(x_ext)
     return x_ext, x_err_ext, w
 
 

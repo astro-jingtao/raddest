@@ -8,7 +8,7 @@ import pandas as pd
 import optax
 from pzflow import Flow
 
-from .tools import get_ext_w, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg, trans_xlog_rotation, trans_xlog_rotation_inv, trans_xlog_rotation_jac
+from .tools import get_ext_w, get_ext_w_qmc, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg, trans_xlog_rotation, trans_xlog_rotation_inv, trans_xlog_rotation_jac
 
 
 def nf_fit_frame(u_ext,
@@ -109,9 +109,10 @@ def construct_nf_fit_func(optimizer,
     def nf_logpdf(params, u, v):
         # we need inner where
         # https://jax.readthedocs.io/en/latest/faq.html#gradients-contain-nan-where-using-where
-        x, x_err = trans_func_inv(u, v, trans_params)
-        cond = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (x_err
-                                                                  < x_err_max)
+        # x, x_err = trans_func_inv(u, v, trans_params)
+        # cond = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (x_err
+        #                                                           < x_err_max)
+        cond = (u > u_min) & (u < u_max) & (v > v_min) & (v < v_max)
         return jnp.where(
             cond,
             _nf_logpdf(params, jnp.clip(u, u_min, u_max),
@@ -145,6 +146,7 @@ def construct_x_xerr_w(x_obs,
                        x_err_min,
                        x_err_max,
                        n_node=21,
+                       qmc=False,
                        trans_func=None,
                        trans_func_jac=None,
                        trans_params=None):
@@ -153,23 +155,28 @@ def construct_x_xerr_w(x_obs,
     x_min, x_max, x_err_min, x_err_max are for original value
     '''
 
-    _x_ext, _x_err_ext, w = get_ext_w(n_node, x_obs, x_err)
+    if qmc:
+        _x_ext, _x_err_ext, w = get_ext_w_qmc(n_node, x_obs, x_err)
+    else:
+        _x_ext, _x_err_ext, w = get_ext_w(n_node, x_obs, x_err)
 
     if trans_func is None:
         u_ext = _x_ext
         v_ext = _x_err_ext
-        w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
-                      (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max), w,
-                      0)
+        # w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
+        #               (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max), w,
+        #               0)
     else:
         u_ext, v_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
-        cond = (_x_ext > x_min) & (_x_ext < x_max) & (
-            _x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
-        w = jnp.where(
-            cond, w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
-            0)
-        u_ext = jnp.where(cond, u_ext, 0)
-        v_ext = jnp.where(cond, v_ext, 0)
+        # cond = (_x_ext > x_min) & (_x_ext < x_max) & (
+        #     _x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
+        # w = jnp.where(
+        #     cond, w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
+        #     0)
+        w = w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params)
+        w = jnp.nan_to_num(w, nan=0)
+        u_ext = jnp.nan_to_num(u_ext, nan=0)
+        v_ext = jnp.nan_to_num(v_ext, nan=0)
 
     return u_ext, v_ext, w
 
@@ -216,23 +223,7 @@ def flow_params_init(x_obs,
 
 
 # TODO: give trans_params
-def nf_fit_trans_neglogplus(x_obs,
-                            x_err,
-                            *,
-                            optimizer,
-                            n_pre=100,
-                            n_train=500,
-                            n_node=21,
-                            verbose=False,
-                            flow=None,
-                            x_min=0,
-                            x_max=jnp.inf,
-                            x_err_min=0,
-                            x_err_max=jnp.inf,
-                            check_per_step=10,
-                            early_stop=True,
-                            max_stuck=5,
-                            stuck_frac=0.05):
+def nf_fit_trans_neglogplus(x_obs, x_err, **kwargs):
 
     x_median = np.median(x_obs)
     x_err_median = np.median(x_err)
@@ -241,67 +232,24 @@ def nf_fit_trans_neglogplus(x_obs,
 
     return nf_fit_general(x_obs,
                           x_err,
-                          optimizer=optimizer,
-                          n_pre=n_pre,
-                          n_train=n_train,
-                          n_node=n_node,
-                          verbose=verbose,
-                          flow=flow,
-                          x_min=x_min,
-                          x_max=x_max,
-                          x_err_min=x_err_min,
-                          x_err_max=x_err_max,
-                          check_per_step=check_per_step,
-                          early_stop=early_stop,
-                          max_stuck=max_stuck,
-                          stuck_frac=stuck_frac,
                           trans_func=trans_neglogplus,
                           trans_func_inv=trans_neglogplus_inv,
                           trans_func_jac=trans_neglogplus_jac,
-                          trans_params=trans_params)
+                          trans_params=trans_params,
+                          **kwargs)
 
 
-def nf_fit_trans_log_rotation(x_obs,
-                              x_err,
-                              *,
-                              optimizer,
-                              theta=0,
-                              n_pre=100,
-                              n_train=500,
-                              n_node=21,
-                              verbose=False,
-                              flow=None,
-                              x_min=0,
-                              x_max=jnp.inf,
-                              x_err_min=0,
-                              x_err_max=jnp.inf,
-                              check_per_step=10,
-                              early_stop=True,
-                              max_stuck=5,
-                              stuck_frac=0.05):
+def nf_fit_trans_log_rotation(x_obs, x_err, *, theta, **kwargs):
 
     trans_params = theta
 
     return nf_fit_general(x_obs,
                           x_err,
-                          optimizer=optimizer,
-                          n_pre=n_pre,
-                          n_train=n_train,
-                          n_node=n_node,
-                          verbose=verbose,
-                          flow=flow,
-                          x_min=x_min,
-                          x_max=x_max,
-                          x_err_min=x_err_min,
-                          x_err_max=x_err_max,
-                          check_per_step=check_per_step,
-                          early_stop=early_stop,
-                          max_stuck=max_stuck,
-                          stuck_frac=stuck_frac,
                           trans_func=trans_xlog_rotation,
                           trans_func_inv=trans_xlog_rotation_inv,
                           trans_func_jac=trans_xlog_rotation_jac,
-                          trans_params=trans_params)
+                          trans_params=trans_params,
+                          **kwargs)
 
 
 def nf_fit_general(x_obs,
@@ -311,6 +259,7 @@ def nf_fit_general(x_obs,
                    n_pre=100,
                    n_train=500,
                    n_node=21,
+                   qmc=False,
                    verbose=False,
                    flow=None,
                    x_min=0,
@@ -333,6 +282,7 @@ def nf_fit_general(x_obs,
                                          x_err_min,
                                          x_err_max,
                                          n_node=n_node,
+                                         qmc=qmc,
                                          trans_func=trans_func,
                                          trans_func_jac=trans_func_jac,
                                          trans_params=trans_params)
@@ -400,6 +350,8 @@ def gen_xobs_trans(flow,
     else:
         x, x_err = trans_func_inv(u_all, v_all, trans_params)
 
+    # We can have this because this is used to fit theta
+    # The normalization constant do not affect results
     is_in_range = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (
         x_err < x_err_max)
 
