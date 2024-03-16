@@ -8,7 +8,7 @@ import pandas as pd
 import optax
 from pzflow import Flow
 
-from .tools import get_ext_w, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg
+from .tools import get_ext_w, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg, trans_xlog_rotation, trans_xlog_rotation_inv, trans_xlog_rotation_jac
 
 
 def nf_fit_frame(u_ext,
@@ -28,6 +28,7 @@ def nf_fit_frame(u_ext,
     opt_state = optimizer.init(params)
 
     loss_best = jnp.inf
+    params_best = params.copy()
     stuck_num = 0
     loss = []
     for i in range(n_train):
@@ -45,13 +46,34 @@ def nf_fit_frame(u_ext,
                                                           loss_best):
                     stuck_num += 1
                     loss_best = _loss
+                    params_best = params.copy()
                     if stuck_num > max_stuck:
                         break
                 else:
                     stuck_num = 0
                     loss_best = _loss
+                    params_best = params.copy()
+
             loss.append(_loss)
-    return params, loss
+    return params_best, loss
+
+
+class NotShiftBoundsError(Exception):
+    pass
+
+
+def find_uv_bounds(_bijector_info):
+    if _bijector_info[0] == 'Chain':
+        for tup in _bijector_info[1]:
+            try:
+                return find_uv_bounds(tup)
+            except NotShiftBoundsError as e:
+                continue
+    elif _bijector_info[0] == 'ShiftBounds':
+        return (_bijector_info[1][0][0], _bijector_info[1][1][0],
+                _bijector_info[1][0][1], _bijector_info[1][1][1])
+    else:
+        raise NotShiftBoundsError
 
 
 def construct_nf_fit_func(optimizer,
@@ -72,11 +94,15 @@ def construct_nf_fit_func(optimizer,
         # no transformation
         trans_func_inv = lambda a, b, p: (a, b)
 
+    u_min, u_max, v_min, v_max = find_uv_bounds(flow._bijector_info)
+
     @jit
     def gaussian_nf(params, u_ext, v_ext, w):
         s1, s2 = u_ext.shape
         _nf_logpdf = nf_logpdf(params, u_ext.flatten(), v_ext.flatten())
-        return logsumexp(jnp.log(w + 1e-10) + _nf_logpdf.reshape(s1, s2),
+        cond = w > 0
+        return logsumexp(jnp.log(jnp.where(cond, w, 1e-10)) +
+                         jnp.where(cond, _nf_logpdf.reshape(s1, s2), -10),
                          axis=1)
 
     @jit
@@ -88,8 +114,8 @@ def construct_nf_fit_func(optimizer,
                                                                   < x_err_max)
         return jnp.where(
             cond,
-            _nf_logpdf(params, jnp.where(cond, u, 0.5),
-                       jnp.where(cond, v, 0.5)), -10)
+            _nf_logpdf(params, jnp.clip(u, u_min, u_max),
+                       jnp.clip(v, v_min, v_max)), -10)
 
     @jit
     def _nf_logpdf(params, u, v):
@@ -98,7 +124,6 @@ def construct_nf_fit_func(optimizer,
 
     @jit
     def log_likelihood(params, u_ext, v_ext, w):
-        # to avoid nan
         return -jnp.mean(gaussian_nf(params, u_ext, v_ext, w))
 
     d_log_likelihood = jit(grad(log_likelihood, argnums=(0, )))
@@ -138,10 +163,13 @@ def construct_x_xerr_w(x_obs,
                       0)
     else:
         u_ext, v_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
+        cond = (_x_ext > x_min) & (_x_ext < x_max) & (
+            _x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
         w = jnp.where(
-            (_x_ext > x_min) & (_x_ext < x_max) & (_x_err_ext > x_err_min) &
-            (_x_err_ext < x_err_max),
-            w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params), 0)
+            cond, w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
+            0)
+        u_ext = jnp.where(cond, u_ext, 0)
+        v_ext = jnp.where(cond, v_ext, 0)
 
     return u_ext, v_ext, w
 
@@ -172,7 +200,7 @@ def flow_params_init(x_obs,
                 'x_err': x_err[is_in_range]
             })
         else:
-            u, v = trans_func(x_obs[is_in_range],
+            u, v = trans_func(x_obs_shrink[is_in_range],
                               x_err[is_in_range],
                               params=trans_params)
             data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
@@ -230,6 +258,49 @@ def nf_fit_trans_neglogplus(x_obs,
                           trans_func=trans_neglogplus,
                           trans_func_inv=trans_neglogplus_inv,
                           trans_func_jac=trans_neglogplus_jac,
+                          trans_params=trans_params)
+
+
+def nf_fit_trans_log_rotation(x_obs,
+                              x_err,
+                              *,
+                              optimizer,
+                              theta=0,
+                              n_pre=100,
+                              n_train=500,
+                              n_node=21,
+                              verbose=False,
+                              flow=None,
+                              x_min=0,
+                              x_max=jnp.inf,
+                              x_err_min=0,
+                              x_err_max=jnp.inf,
+                              check_per_step=10,
+                              early_stop=True,
+                              max_stuck=5,
+                              stuck_frac=0.05):
+
+    trans_params = theta
+
+    return nf_fit_general(x_obs,
+                          x_err,
+                          optimizer=optimizer,
+                          n_pre=n_pre,
+                          n_train=n_train,
+                          n_node=n_node,
+                          verbose=verbose,
+                          flow=flow,
+                          x_min=x_min,
+                          x_max=x_max,
+                          x_err_min=x_err_min,
+                          x_err_max=x_err_max,
+                          check_per_step=check_per_step,
+                          early_stop=early_stop,
+                          max_stuck=max_stuck,
+                          stuck_frac=stuck_frac,
+                          trans_func=trans_xlog_rotation,
+                          trans_func_inv=trans_xlog_rotation_inv,
+                          trans_func_jac=trans_xlog_rotation_jac,
                           trans_params=trans_params)
 
 
@@ -343,6 +414,29 @@ def gen_xobs_trans(flow,
         x_obs = np.array(x_obs)
 
     return x, x_err, x_obs
+
+
+def gen_xobs_trans_log_rotation(flow,
+                                N,
+                                x_min,
+                                x_max,
+                                x_err_min,
+                                x_err_max,
+                                trans_params,
+                                return_numpy=False):
+    '''
+    return:
+        x_gen, x_err_gen, x_obs_gen
+    '''
+    return gen_xobs_trans(flow,
+                          N,
+                          x_min,
+                          x_max,
+                          x_err_min,
+                          x_err_max,
+                          trans_func_inv=trans_xlog_rotation_inv,
+                          trans_params=trans_params,
+                          return_numpy=return_numpy)
 
 
 def gen_xobs_trans_neglogplus(flow,
