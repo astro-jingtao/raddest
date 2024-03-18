@@ -1,6 +1,7 @@
 import jax.numpy as jnp
-from jax.scipy.stats import norm
 from jax import jit
+from jax.scipy.stats import norm
+
 
 def construct_lognorm_likelihood(func):
 
@@ -8,8 +9,11 @@ def construct_lognorm_likelihood(func):
     def lognorm(x, y, params):
         # if x < 0 or y < 0 return 0, else gaussian(log10y - get_loc(log10x, params), get_scale(params))
         # params: (k, b, ...), sig
-        return jnp.where((x < 0) | (y < 0), 0, norm.pdf(jnp.log10(jnp.abs(y)), loc = func(jnp.log10(jnp.abs(x)), params[:-1]), scale=params[-1]))
-    
+        return jnp.where((x < 0) | (y < 0), 0,
+                         norm.pdf(jnp.log10(jnp.abs(y)),
+                                  loc=func(jnp.log10(jnp.abs(x)), params[:-1]),
+                                  scale=params[-1]))
+
     @jit
     def likelihhod(params, x_ext, y_ext, w):
         """
@@ -18,11 +22,12 @@ def construct_lognorm_likelihood(func):
         w: (N, ) w = w_ghq * p(x, x_err) * p(y_err|y) / y / ln(10)
         """
         return jnp.sum(lognorm(x_ext, y_ext, params) * w, axis=1)
-    
+
     return likelihhod
 
+
 def construct_lognorm_linear_step(d_log_likelihood):
-    
+
     @jit
     def step(params, x_ext, y_ext, w, lr=1e-3):
         dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
@@ -32,5 +37,5 @@ def construct_lognorm_linear_step(d_log_likelihood):
         b = jnp.clip(b + lr * db, -1e2, 1e2)
         sig = jnp.clip(sig + lr * dsig, 1e-2, 1e2)
         return (k, b, sig)
-    
+
     return step

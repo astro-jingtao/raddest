@@ -1,14 +1,18 @@
 # TODO: quantile transform
 
-import numpy as np
 import jax.numpy as jnp
-from jax.scipy.special import logsumexp
-from jax import jit, grad
-import pandas as pd
+import numpy as np
 import optax
+import pandas as pd
+from jax import grad, jit
+from jax.scipy.special import logsumexp
 from pzflow import Flow
 
-from .tools import get_ext_w, get_ext_w_qmc, trans_neglogplus, trans_neglogplus_inv, trans_neglogplus_jac, trans_neglogplus_xshift_inv, trans_xshift_neglogplus_inv, shrink_gg, trans_xlog_rotation, trans_xlog_rotation_inv, trans_xlog_rotation_jac
+from .tools import (get_ext_w, get_ext_w_qmc, shrink_gg, trans_neglogplus,
+                    trans_neglogplus_inv, trans_neglogplus_jac,
+                    trans_neglogplus_xshift_inv, trans_xlog_rotation,
+                    trans_xlog_rotation_inv, trans_xlog_rotation_jac,
+                    trans_xshift_neglogplus_inv)
 
 
 def nf_fit_frame(u_ext,

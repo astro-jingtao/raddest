@@ -1,9 +1,10 @@
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 from jax import jit
 from jax.scipy.stats import norm
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
+
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
 

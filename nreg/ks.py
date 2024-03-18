@@ -1,21 +1,19 @@
 import numpy as np
-from ndtest.ksnd import ks2d2s
 from asa.Bcorner import quantile
-from .reg import loglinear_x2y
-from .grid_search import get_weighted_res
+from ndtest.ksnd import ks2d2s
 
-def get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, params, x_obs, y_obs):
+from .grid_search import get_weighted_res
+from .reg import loglinear_x2y
+
+
+def get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, params,
+                         x_obs, y_obs):
     k = params[0]
     b = params[1]
     sig = params[2]
 
-    x_obs_gen, y_obs_gen = loglinear_x2y(x_gen,
-                                          x_obs_gen,
-                                          y_gen_kdt,
-                                          y_err_gen_kdt,
-                                          k,
-                                          b,
-                                          sig)
+    x_obs_gen, y_obs_gen = loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt,
+                                         y_err_gen_kdt, k, b, sig)
 
     return ks2d2s(
         x_obs_gen,
@@ -32,16 +30,10 @@ def parser(res, iargs):
     return res_arr
 
 
-def compare_loglinear(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, x_obs, y_obs):
-    return get_ks_reg_loglinear(
-        x_gen,
-        x_obs_gen,
-        y_gen_kdt,
-        y_err_gen_kdt,
-        (k, b, sig),
-        x_obs,
-        y_obs
-    )
+def compare_loglinear(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt,
+                      x_obs, y_obs):
+    return get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt,
+                                (k, b, sig), x_obs, y_obs)
 
 
 def gen_new_grid_mean_std(res_arr, n=10):
@@ -66,20 +58,18 @@ def gen_new_grid_quantile(res_arr, n=10, _min_range=0.1):
     k_med = q_list[0, 1]
     k_low = max(k_med - q_list[0, 0], _min_range)
     k_up = max(q_list[0, 2] - k_med, _min_range)
-    k_list = np.linspace(k_med - 3 * k_low,
-                         k_med + 3 * k_up, n)
+    k_list = np.linspace(k_med - 3 * k_low, k_med + 3 * k_up, n)
 
     b_med = q_list[1, 1]
     b_low = max(b_med - q_list[1, 0], _min_range)
     b_up = max(q_list[1, 2] - b_med, _min_range)
-    b_list = np.linspace(b_med - 3 * b_low,
-                         b_med + 3 * b_up, n)
+    b_list = np.linspace(b_med - 3 * b_low, b_med + 3 * b_up, n)
 
     sig_med = q_list[2, 1]
     sig_low = max(sig_med - q_list[2, 0], _min_range)
     sig_up = max(q_list[2, 2] - sig_med, _min_range)
-    sig_list = np.linspace(max(0, sig_med - 3 * sig_low),
-                           sig_med + 3 * sig_up, n)
+    sig_list = np.linspace(max(0, sig_med - 3 * sig_low), sig_med + 3 * sig_up,
+                           n)
 
     return (k_list, b_list, sig_list)
 
