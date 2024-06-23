@@ -61,44 +61,33 @@ def nf_fit_frame(u_ext,
             loss.append(_loss)
     return params_best, loss
 
-
-class NotShiftBoundsError(Exception):
-    pass
-
-
 def find_uv_bounds(_bijector_info):
     if _bijector_info[0] == 'Chain':
         for tup in _bijector_info[1]:
-            try:
-                return find_uv_bounds(tup)
-            except NotShiftBoundsError as e:
-                continue
+            result = find_uv_bounds(tup)
+            if result is not None:
+                return result
+        return None  # If do not find bounds in chain，return None
     elif _bijector_info[0] == 'ShiftBounds':
         return (_bijector_info[1][0][0], _bijector_info[1][1][0],
                 _bijector_info[1][0][1], _bijector_info[1][1][1])
     else:
-        raise NotShiftBoundsError
+        return None  # If not 'Chain' or 'ShiftBounds'，return None
 
 
-def construct_nf_fit_func(optimizer,
-                          flow,
-                          x_min,
-                          x_max,
-                          x_err_min,
-                          x_err_max,
-                          trans_func_inv=None,
-                          trans_params=None):
+def construct_nf_fit_func(optimizer, flow):
     '''
     u_ext and v_ext are transformed value
     x_min, x_max, x_err_min, x_err_max are for original value
     the jacobian of transformation is included in the weight, w
     '''
 
-    if trans_func_inv is None:
-        # no transformation
-        trans_func_inv = lambda a, b, p: (a, b)
+    uv_bounds = find_uv_bounds(flow._bijector_info)
 
-    u_min, u_max, v_min, v_max = find_uv_bounds(flow._bijector_info)
+    if uv_bounds is None:
+        raise ValueError("Cannot find bounds in bijector")
+
+    u_min, u_max, v_min, v_max = uv_bounds
 
     @jit
     def gaussian_nf(params, u_ext, v_ext, w):
@@ -113,9 +102,6 @@ def construct_nf_fit_func(optimizer,
     def nf_logpdf(params, u, v):
         # we need inner where
         # https://jax.readthedocs.io/en/latest/faq.html#gradients-contain-nan-where-using-where
-        # x, x_err = trans_func_inv(u, v, trans_params)
-        # cond = (x > x_min) & (x < x_max) & (x_err > x_err_min) & (x_err
-        #                                                           < x_err_max)
         cond = (u > u_min) & (u < u_max) & (v > v_min) & (v < v_max)
         return jnp.where(
             cond,
@@ -145,10 +131,6 @@ def construct_nf_fit_func(optimizer,
 
 def construct_x_xerr_w(x_obs,
                        x_err,
-                       x_min,
-                       x_max,
-                       x_err_min,
-                       x_err_max,
                        n_node=21,
                        qmc=False,
                        trans_func=None,
@@ -167,16 +149,8 @@ def construct_x_xerr_w(x_obs,
     if trans_func is None:
         u_ext = _x_ext
         v_ext = _x_err_ext
-        # w = jnp.where((_x_ext > x_min) & (_x_ext < x_max) &
-        #               (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max), w,
-        #               0)
     else:
         u_ext, v_ext = trans_func(_x_ext, _x_err_ext, params=trans_params)
-        # cond = (_x_ext > x_min) & (_x_ext < x_max) & (
-        #     _x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
-        # w = jnp.where(
-        #     cond, w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params),
-        #     0)
         w = w * trans_func_jac(_x_ext, _x_err_ext, params=trans_params)
         w = jnp.nan_to_num(w, nan=0)
         u_ext = jnp.nan_to_num(u_ext, nan=0)
@@ -237,7 +211,6 @@ def nf_fit_trans_neglogplus(x_obs, x_err, **kwargs):
     return nf_fit_general(x_obs,
                           x_err,
                           trans_func=trans_neglogplus,
-                          trans_func_inv=trans_neglogplus_inv,
                           trans_func_jac=trans_neglogplus_jac,
                           trans_params=trans_params,
                           **kwargs)
@@ -250,7 +223,6 @@ def nf_fit_trans_log_rotation(x_obs, x_err, *, theta, **kwargs):
     return nf_fit_general(x_obs,
                           x_err,
                           trans_func=trans_xlog_rotation,
-                          trans_func_inv=trans_xlog_rotation_inv,
                           trans_func_jac=trans_xlog_rotation_jac,
                           trans_params=trans_params,
                           **kwargs)
@@ -275,16 +247,11 @@ def nf_fit_general(x_obs,
                    max_stuck=5,
                    stuck_frac=0.05,
                    trans_func=None,
-                   trans_func_inv=None,
                    trans_func_jac=None,
                    trans_params=None):
 
     u_ext, v_ext, w = construct_x_xerr_w(x_obs,
                                          x_err,
-                                         x_min,
-                                         x_max,
-                                         x_err_min,
-                                         x_err_max,
                                          n_node=n_node,
                                          qmc=qmc,
                                          trans_func=trans_func,
@@ -303,15 +270,7 @@ def nf_fit_general(x_obs,
                                     n_pre=n_pre,
                                     verbose=verbose)
 
-    update_params, log_likelihood = construct_nf_fit_func(
-        optimizer,
-        flow,
-        x_min,
-        x_max,
-        x_err_min,
-        x_err_max,
-        trans_func_inv=trans_func_inv,
-        trans_params=trans_params)
+    update_params, log_likelihood = construct_nf_fit_func(optimizer, flow)
 
     params, loss = nf_fit_frame(u_ext,
                                 v_ext,

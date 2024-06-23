@@ -277,12 +277,20 @@ def get_xyw_trans_neglogplus_lognorm(x_obs,
                                  x_trans_func_jac=trans_neglogplus_jac,
                                  x_trans_params=x_trans_params,
                                  y_trans_func=trans_neglogplus,
-                                 y_trans_func_dx=trans_neglogplus_dx,
+                                 y_trans_func_jac=trans_neglogplus_jac,
+                                 y_trans_func_inv=trans_neglogplus_inv,
                                  y_trans_params=y_trans_params,
                                  n=n)
 
 
-def loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, k, b, sig):
+def loglinear_x2y(x_gen,
+                  x_obs_gen,
+                  y_gen_kdt,
+                  y_err_gen_kdt,
+                  k,
+                  b,
+                  sig,
+                  return_more=False):
     tree = KDTree(y_gen_kdt.reshape(-1, 1))
 
     log10_y_gen = k * np.log10(x_gen) + b + np.random.normal(scale=sig,
@@ -295,7 +303,10 @@ def loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, k, b, sig):
     y_err_gen = y_err_gen_kdt[y_err_match_index]
     y_obs_gen = y_gen + np.random.normal(scale=y_err_gen)
 
-    return x_obs_gen, y_obs_gen
+    if return_more:
+        return x_obs_gen, y_obs_gen, y_err_gen, y_gen
+    else:
+        return x_obs_gen, y_obs_gen
 
 
 def gen_xy_obs_trans_prepare(flowx,
@@ -313,7 +324,7 @@ def gen_xy_obs_trans_prepare(flowx,
     x_min, x_max = x_range
     x_err_min, x_err_max = x_err_range
 
-    x_gen, _, x_obs_gen = gen_xobs_trans(flowx,
+    x_gen, x_err_gen, x_obs_gen = gen_xobs_trans(flowx,
                                          n,
                                          x_min,
                                          x_max,
@@ -341,7 +352,7 @@ def gen_xy_obs_trans_prepare(flowx,
         y_gen_kdt = np.array(y_gen_kdt)
         y_err_gen_kdt = np.array(y_err_gen_kdt)
 
-    return x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt
+    return x_gen, x_err_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt
 
 
 def gen_xy_obs_trans_loglinear(flowx,
@@ -358,9 +369,10 @@ def gen_xy_obs_trans_loglinear(flowx,
                                x_trans_params=None,
                                y_trans_func_inv=None,
                                y_trans_params=None,
-                               return_numpy=False):
+                               return_numpy=False,
+                               return_more=False):
 
-    x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt = gen_xy_obs_trans_prepare(
+    x_gen, x_err_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt = gen_xy_obs_trans_prepare(
         flowx,
         flowy,
         x_range,
@@ -374,7 +386,20 @@ def gen_xy_obs_trans_loglinear(flowx,
         y_trans_params=y_trans_params,
         return_numpy=return_numpy)
 
-    return loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, k, b, sig)
+    if not return_more:
+        return loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, k, b,
+                             sig)
+    
+    x_obs_gen, y_obs_gen, y_err_gen, y_gen = loglinear_x2y(
+        x_gen,
+        x_obs_gen,
+        y_gen_kdt,
+        y_err_gen_kdt,
+        k,
+        b,
+        sig,
+        return_more=True)
+    return x_obs_gen, y_obs_gen, x_gen, y_gen, x_err_gen, y_err_gen
 
 
 def gen_xy_obs_trans_neglogplus_loglinear(flowx,
