@@ -6,8 +6,15 @@ from .grid_search import get_weighted_res
 from .reg import loglinear_x2y
 
 
-def get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, params,
-                         x_obs, y_obs, nboot=None):
+def get_ks_reg_loglinear(x_gen,
+                         x_obs_gen,
+                         y_gen_kdt,
+                         y_err_gen_kdt,
+                         params,
+                         x_obs,
+                         y_obs,
+                         nboot=None,
+                         n_jobs=1):
     k = params[0]
     b = params[1]
     sig = params[2]
@@ -15,7 +22,12 @@ def get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt, params,
     x_obs_gen, y_obs_gen = loglinear_x2y(x_gen, x_obs_gen, y_gen_kdt,
                                          y_err_gen_kdt, k, b, sig)
 
-    return ks2d2s(x_obs_gen, y_obs_gen, x_obs, y_obs, nboot=nboot)
+    return ks2d2s(x_obs_gen,
+                  y_obs_gen,
+                  x_obs,
+                  y_obs,
+                  nboot=nboot,
+                  n_jobs=n_jobs)
 
 
 def parser(res, iargs):
@@ -25,10 +37,25 @@ def parser(res, iargs):
     return res_arr
 
 
-def compare_loglinear(k, b, sig, x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt,
-                      x_obs, y_obs, nboot=None):
-    return get_ks_reg_loglinear(x_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt,
-                                (k, b, sig), x_obs, y_obs, nboot=nboot)
+def compare_loglinear(k,
+                      b,
+                      sig,
+                      x_gen,
+                      x_obs_gen,
+                      y_gen_kdt,
+                      y_err_gen_kdt,
+                      x_obs,
+                      y_obs,
+                      nboot=None,
+                      n_jobs=1):
+    return get_ks_reg_loglinear(x_gen,
+                                x_obs_gen,
+                                y_gen_kdt,
+                                y_err_gen_kdt, (k, b, sig),
+                                x_obs,
+                                y_obs,
+                                nboot=nboot,
+                                n_jobs=n_jobs)
 
 
 def gen_new_grid_mean_std(res_arr, n=10):
