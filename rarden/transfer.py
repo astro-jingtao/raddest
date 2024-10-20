@@ -1,3 +1,5 @@
+import joblib
+
 import jax.numpy as jnp
 from jax import jit
 from .tools import neg_log_plus, neg_log_plus_inv
@@ -9,6 +11,22 @@ class Transfer:
         self.trans = trans
         self.inv = inv
         self.jac = jac
+
+    @classmethod
+    def load(cls, path, name_func_mapper=None):
+        if name_func_mapper is None:
+            name_func_mapper = NAME_FUNC_MAPPER
+        load_dict = joblib.load(path)
+        cls_par = {k: NAME_FUNC_MAPPER[load_dict[k]] for k in load_dict}
+        return cls(**cls_par)
+
+    def save(self, path):
+        save_dict = {
+            'trans': self.trans.__name__,
+            'inv': self.inv.__name__,
+            'jac': self.jac.__name__
+        }
+        joblib.dump(save_dict, path)
 
 
 # -- neglogplus --
@@ -146,3 +164,15 @@ def trans_neglogplus_xshift_jac(x, x_err, params):
 neglogplus_xshift = Transfer(trans_neglogplus_xshift,
                              trans_neglogplus_xshift_inv,
                              trans_neglogplus_xshift_jac)
+
+all_trans_func = [
+    'neglogplus', 'log_rotation', 'xshift_neglogplus', 'neglogplus_xshift'
+]
+
+NAME_FUNC_MAPPER = {}
+for trans_name in all_trans_func:
+    NAME_FUNC_MAPPER[f'trans_{trans_name}'] = globals()[f'trans_{trans_name}']
+    NAME_FUNC_MAPPER[f'trans_{trans_name}_inv'] = globals(
+    )[f'trans_{trans_name}_inv']
+    NAME_FUNC_MAPPER[f'trans_{trans_name}_jac'] = globals(
+    )[f'trans_{trans_name}_jac']
