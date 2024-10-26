@@ -1,13 +1,24 @@
-from typing import Union
 import os
+from typing import Union
 
-import joblib
-from pzflow import Flow
 import jax.numpy as jnp
+import joblib
+import numpy as np
 import optax
+from jax import grad, jacrev, jit
+from jax.scipy.stats import norm
+from ndtest.ksnd import ks2d2s
+from pzflow import Flow
 
+from ..grid_search import zoom_in_grid
+from ..reg.constructor import (construct_generator_cond, construct_likelihood,
+                               construct_linear_step, construct_log_likelihood,
+                               construct_trainer)
+from ..reg.ks import gen_xy_obs_trans_prepare, loglinear, parser_loglinear, gen_new_grid_mean_std, print_mean_std_loglinear
+from ..reg.map import get_xyw_trans_lognorm
 from ..transfer import Transfer
-from ..x_xerr import nf_fit_general, gen_xobs_trans, construct_x_xerr_w, construct_nf_fit_func
+from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
+                      gen_xobs_trans, nf_fit_general)
 
 
 class FlowVI:
@@ -45,7 +56,7 @@ class FlowVI:
         is_fitted = att.pop('fitted')
         new_cls = cls(flow=flow, **att)
         new_cls.fitted = is_fitted
-    
+
         return new_cls
 
     def fit(self,
@@ -149,6 +160,24 @@ class FlowVI:
         return log_likelihood([self.flow._params[0], self.flow._params[1]],
                               u_ext, v_ext, w)
 
+    def ks_test(self,
+                x_obs,
+                x_err,
+                N,
+                x_min=None,
+                x_max=None,
+                x_err_min=None,
+                x_err_max=None):
+
+        x_gen, x_err_gen, x_obs_gen = self.sample(N,
+                                                  x_min=x_min,
+                                                  x_max=x_max,
+                                                  x_err_min=x_err_min,
+                                                  x_err_max=x_err_max,
+                                                  return_numpy=True)
+
+        return ks2d2s(x_obs, x_err, x_obs_gen, x_err_gen)
+
     def save(self, folder):
 
         if not os.path.exists(folder):
@@ -183,7 +212,270 @@ class FlowVI:
         self.flow.save(os.path.join(folder, 'flow'))
 
 
-class Regressor:
-    def __init__(self):
-        pass
+class RegressorBase:
 
+    def __init__(self, xflow, yflow, func_x2y=None):
+        self.xflow = xflow
+        self.yflow = yflow
+
+        self.set_generator_cond(func_x2y)
+
+    def _set_range(self,
+                   x_range,
+                   x_err_range,
+                   y_range,
+                   y_err_range,
+                   return_numpy=False):
+
+        if x_range is None:
+            x_range = [self.xflow.x_min, self.xflow.x_max]
+        if x_err_range is None:
+            x_err_range = [self.xflow.x_err_min, self.xflow.x_err_max]
+        if y_range is None:
+            y_range = [self.yflow.x_min, self.yflow.x_max]
+        if y_err_range is None:
+            y_err_range = [self.yflow.x_err_min, self.yflow.x_err_max]
+
+        if return_numpy:
+            x_range = np.array(x_range)
+            x_err_range = np.array(x_err_range)
+            y_range = np.array(y_range)
+            y_err_range = np.array(y_err_range)
+
+        return x_range, x_err_range, y_range, y_err_range
+
+    def set_generator_cond(self, func_x2y):
+        if func_x2y is not None:
+            self.generator_cond = construct_generator_cond(func_x2y)
+        else:
+            self.generator_cond = None
+
+    def sample(self,
+               params,
+               N=1000,
+               x_range=None,
+               x_err_range=None,
+               y_range=None,
+               y_err_range=None):
+
+        if self.generator_cond is None:
+            raise ValueError(
+                "No conditional generator is not set. Please set it use `self.set_generator_cond()` first."
+            )
+
+        x_range, x_err_range, y_range, y_err_range = self._set_range(
+            x_range, x_err_range, y_range, y_err_range)
+
+        x_gen, x_err_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt = gen_xy_obs_trans_prepare(
+            self.xflow.flow,
+            self.yflow.flow,
+            x_range,
+            x_err_range,
+            y_range,
+            y_err_range,
+            x_transfer=self.xflow.transfer,
+            x_transfer_params=self.xflow.transfer_params,
+            y_transfer=self.yflow.transfer,
+            y_transfer_params=self.yflow.transfer_params,
+            n=N,
+            return_numpy=True)
+
+        y_gen, y_err_gen, y_obs_gen = self.generator_cond(x_gen,
+                                                          y_gen_kdt,
+                                                          y_err_gen_kdt,
+                                                          params,
+                                                          y_min=y_range[0],
+                                                          y_max=y_range[-1])
+
+        return x_obs_gen, y_obs_gen, x_err_gen, y_err_gen, x_gen, y_gen
+
+
+class RegressorML(RegressorBase):
+
+    def __init__(self, xflow, yflow, p_cond, step_constructor, func_x2y=None):
+
+        super().__init__(xflow, yflow, func_x2y=func_x2y)
+
+        self.likelihhod = construct_likelihood(p_cond)
+        self.log_likelihood, self.d_log_likelihood, self.dd_log_likelihood = construct_log_likelihood(
+            self.likelihhod)
+        self.step = step_constructor(self.d_log_likelihood)
+        self.trainer = construct_trainer(self.log_likelihood, self.step)
+
+    def fit(self,
+            x_obs,
+            x_err,
+            y_obs,
+            y_err,
+            params_0,
+            n=21,
+            x_range=None,
+            x_err_range=None,
+            y_range=None,
+            y_err_range=None,
+            lr=1e-3,
+            n_step=10000,
+            atol=1e-3,
+            rtol=1e-3,
+            verbose=False):
+
+        x_range, x_err_range, y_range, y_err_range = self._set_range(
+            x_range, x_err_range, y_range, y_err_range)
+
+        x_ext, y_ext, w = get_xyw_trans_lognorm(
+            x_obs,
+            y_obs,
+            x_err,
+            y_err,
+            self.xflow.flow,
+            self.yflow.flow,
+            x_range,
+            x_err_range,
+            y_range,
+            y_err_range,
+            x_transfer=self.xflow.transfer,
+            x_transfer_params=self.xflow.transfer_params,
+            y_transfer=self.yflow.transfer,
+            y_transfer_params=self.yflow.transfer_params,
+            n=n)
+
+        return self.trainer(params_0,
+                            x_ext,
+                            y_ext,
+                            w,
+                            lr=lr,
+                            n_step=n_step,
+                            atol=atol,
+                            rtol=rtol,
+                            verbose=verbose)
+
+
+class RegressorLogLinearML(RegressorML):
+
+    def __init__(self, xflow, yflow):
+
+        @jit
+        def loglinear_jax(x, params):
+            return params[0] * jnp.log10(jnp.abs(x)) + params[1]
+
+        @jit
+        def lognorm(x, y, params):
+            # if (x < 0) or (y < 0) return 0, else gaussian(log10y - get_loc(log10x, params), get_scale(params))
+            # params: (k, b, ...), sig
+            return jnp.where((x < 0) | (y < 0), 0,
+                             norm.pdf(jnp.log10(jnp.abs(y)),
+                                      loc=loglinear_jax(x, params[:-1]),
+                                      scale=params[-1]))
+
+        super().__init__(xflow,
+                         yflow,
+                         lognorm,
+                         construct_linear_step,
+                         func_x2y=loglinear)
+
+
+class RegressorKS(RegressorBase):
+
+    def __init__(self, xflow, yflow, func_x2y):
+
+        if func_x2y is None:
+            raise ValueError("No function to convert x to y is provided.")
+
+        super().__init__(xflow, yflow, func_x2y=func_x2y)
+
+    def fit(self,
+            x_obs,
+            y_obs,
+            *,
+            params_list,
+            parser,
+            gen_new_grid,
+            print_mean_std,
+            N=1000,
+            x_range=None,
+            x_err_range=None,
+            y_range=None,
+            y_err_range=None,
+            num_process=10,
+            max_i=10,
+            rtol=1e-3,
+            atol=1e-3,
+            verbose=False):
+
+        x_range, x_err_range, y_range, y_err_range = self._set_range(
+            x_range, x_err_range, y_range, y_err_range, return_numpy=True)
+
+        x_gen, _, x_obs_gen, y_kdt, y_err_kdt = gen_xy_obs_trans_prepare(
+            self.xflow.flow,
+            self.yflow.flow,
+            x_range,
+            x_err_range,
+            y_range,
+            y_err_range,
+            x_transfer=self.xflow.transfer,
+            x_transfer_params=self.xflow.transfer_params,
+            y_transfer=self.yflow.transfer,
+            y_transfer_params=self.yflow.transfer_params,
+            n=N,
+            return_numpy=True)
+
+        def compare(*params):
+
+            _, _, y_obs_gen = self.generator_cond(x_gen, y_kdt, y_err_kdt,
+                                                  params)
+
+            return ks2d2s(x_obs_gen, y_obs_gen, x_obs, y_obs)
+
+        w_index = len(params_list) + 1
+
+        return zoom_in_grid(compare,
+                            params_list,
+                            w_index,
+                            parser,
+                            gen_new_grid,
+                            print_mean_std,
+                            num_process=num_process,
+                            max_i=max_i,
+                            rtol=rtol,
+                            atol=atol,
+                            verbose=verbose)
+
+
+class RegressorLogLinearKS(RegressorKS):
+
+    def __init__(self, xflow, yflow):
+
+        super().__init__(xflow, yflow, func_x2y=loglinear)
+
+    def fit(self,
+            x_obs,
+            y_obs,
+            *,
+            params_list,
+            N=1000,
+            x_range=None,
+            x_err_range=None,
+            y_range=None,
+            y_err_range=None,
+            num_process=10,
+            max_i=10,
+            rtol=1e-3,
+            atol=1e-3,
+            verbose=False):
+
+        return super().fit(x_obs,
+                           y_obs,
+                           params_list=params_list,
+                           parser=parser_loglinear,
+                           gen_new_grid=gen_new_grid_mean_std,
+                           print_mean_std=print_mean_std_loglinear,
+                           N=N,
+                           x_range=x_range,
+                           x_err_range=x_err_range,
+                           y_range=y_range,
+                           y_err_range=y_err_range,
+                           num_process=num_process,
+                           max_i=max_i,
+                           rtol=rtol,
+                           atol=atol,
+                           verbose=verbose)
