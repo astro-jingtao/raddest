@@ -1,5 +1,6 @@
 import os
 from typing import Union
+from functools import partial
 
 import jax.numpy as jnp
 import joblib
@@ -10,11 +11,11 @@ from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
 
-from ..grid_search import zoom_in_grid
+from ..grid_search import zoom_in_grid, gen_new_grid_mean_std
 from ..reg.constructor import (construct_generator_cond, construct_likelihood,
                                construct_linear_step, construct_log_likelihood,
                                construct_trainer)
-from ..reg.ks import gen_xy_obs_trans_prepare, loglinear, parser_loglinear, gen_new_grid_mean_std, print_mean_std_loglinear
+from ..reg.ks import gen_xy_obs_prepare, loglinear_scatter, parser_loglinear, print_mean_std_loglinear
 from ..reg.map import get_xyw_trans_lognorm
 from ..transfer import Transfer
 from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
@@ -266,7 +267,7 @@ class RegressorBase:
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
 
-        x_gen, x_err_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt = gen_xy_obs_trans_prepare(
+        x_gen, x_err_gen, x_obs_gen, y_gen_kdt, y_err_gen_kdt = gen_xy_obs_prepare(
             self.xflow.flow,
             self.yflow.flow,
             x_range,
@@ -371,26 +372,28 @@ class RegressorLogLinearML(RegressorML):
                          yflow,
                          lognorm,
                          construct_linear_step,
-                         func_x2y=loglinear)
+                         func_x2y=loglinear_scatter)
 
 
 class RegressorKS(RegressorBase):
 
-    def __init__(self, xflow, yflow, func_x2y):
+    def __init__(self, xflow, yflow, func_x2y, *, parser, gen_new_grid,
+                 print_mean_std):
 
         if func_x2y is None:
             raise ValueError("No function to convert x to y is provided.")
 
         super().__init__(xflow, yflow, func_x2y=func_x2y)
 
+        self.parser = parser
+        self.gen_new_grid = gen_new_grid
+        self.print_mean_std = print_mean_std
+
     def fit(self,
             x_obs,
             y_obs,
             *,
             params_list,
-            parser,
-            gen_new_grid,
-            print_mean_std,
             N=1000,
             x_range=None,
             x_err_range=None,
@@ -405,7 +408,7 @@ class RegressorKS(RegressorBase):
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range, return_numpy=True)
 
-        x_gen, _, x_obs_gen, y_kdt, y_err_kdt = gen_xy_obs_trans_prepare(
+        x_gen, _, x_obs_gen, y_kdt, y_err_kdt = gen_xy_obs_prepare(
             self.xflow.flow,
             self.yflow.flow,
             x_range,
@@ -431,9 +434,9 @@ class RegressorKS(RegressorBase):
         return zoom_in_grid(compare,
                             params_list,
                             w_index,
-                            parser,
-                            gen_new_grid,
-                            print_mean_std,
+                            self.parser,
+                            self.gen_new_grid,
+                            self.print_mean_std,
                             num_process=num_process,
                             max_i=max_i,
                             rtol=rtol,
@@ -443,9 +446,23 @@ class RegressorKS(RegressorBase):
 
 class RegressorLogLinearKS(RegressorKS):
 
-    def __init__(self, xflow, yflow):
+    def __init__(self, xflow, yflow, gen_new_grid_kwargs=None):
 
-        super().__init__(xflow, yflow, func_x2y=loglinear)
+        if gen_new_grid_kwargs is None:
+            gen_new_grid_kwargs = {}
+
+        if 'range_par' not in gen_new_grid_kwargs:
+            gen_new_grid_kwargs['range_par'] = [[-np.inf, np.inf],
+                                                [-np.inf, np.inf], [0, np.inf]]
+
+        gen_new_grid = partial(gen_new_grid_mean_std, **gen_new_grid_kwargs)
+
+        super().__init__(xflow,
+                         yflow,
+                         func_x2y=loglinear_scatter,
+                         gen_new_grid=gen_new_grid,
+                         parser=parser_loglinear,
+                         print_mean_std=print_mean_std_loglinear)
 
     def fit(self,
             x_obs,
@@ -466,9 +483,6 @@ class RegressorLogLinearKS(RegressorKS):
         return super().fit(x_obs,
                            y_obs,
                            params_list=params_list,
-                           parser=parser_loglinear,
-                           gen_new_grid=gen_new_grid_mean_std,
-                           print_mean_std=print_mean_std_loglinear,
                            N=N,
                            x_range=x_range,
                            x_err_range=x_err_range,
