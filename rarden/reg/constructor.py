@@ -1,8 +1,9 @@
-import numpy as np
-from scipy.spatial import KDTree
 import jax.numpy as jnp
+import numpy as np
 from jax import grad, jacrev, jit
 from jax.scipy.stats import norm
+from ndtest.ksnd import ks2d2s
+from scipy.spatial import KDTree
 
 
 def construct_trainer(log_likelihood, step):
@@ -111,7 +112,7 @@ def construct_log_likelihood(likelihood):
 
 
 def construct_generator_cond(func_x2y):
-    
+
     def generator_cond(x, y_kdt, y_err_kdt, params, y_min=None, y_max=None):
 
         if y_min is None:
@@ -129,3 +130,15 @@ def construct_generator_cond(func_x2y):
         return y_pred, y_err_pred, y_obs_pred
 
     return generator_cond
+
+
+def construct_ks_compare(generator_cond, x_gen, x_obs_gen, y_kdt, y_err_kdt,
+                         x_obs, y_obs):
+
+    def ks_compare(*params):
+
+        _, _, y_obs_gen = generator_cond(x_gen, y_kdt, y_err_kdt, params)
+
+        return ks2d2s(x_obs_gen, y_obs_gen, x_obs, y_obs)
+
+    return ks_compare

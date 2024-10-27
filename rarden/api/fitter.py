@@ -14,7 +14,7 @@ from pzflow import Flow
 from ..grid_search import zoom_in_grid, gen_new_grid_mean_std
 from ..reg.constructor import (construct_generator_cond, construct_likelihood,
                                construct_linear_step, construct_log_likelihood,
-                               construct_trainer)
+                               construct_trainer, construct_ks_compare)
 from ..reg.ks import gen_xy_obs_prepare, loglinear_scatter, parser_loglinear, print_mean_std_loglinear
 from ..reg.map import get_xyw_trans_lognorm
 from ..transfer import Transfer
@@ -405,6 +405,9 @@ class RegressorKS(RegressorBase):
             atol=1e-3,
             verbose=False):
 
+        x_obs = np.asarray(x_obs)
+        y_obs = np.asarray(y_obs)
+
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range, return_numpy=True)
 
@@ -422,12 +425,9 @@ class RegressorKS(RegressorBase):
             n=N,
             return_numpy=True)
 
-        def compare(*params):
-
-            _, _, y_obs_gen = self.generator_cond(x_gen, y_kdt, y_err_kdt,
-                                                  params)
-
-            return ks2d2s(x_obs_gen, y_obs_gen, x_obs, y_obs)
+        # Use construct_ks_compare but not define ks_compare here, or each process in zoom_in_grid will try to import jax thus lead to OOM.
+        compare = construct_ks_compare(self.generator_cond, x_gen, x_obs_gen,
+                                       y_kdt, y_err_kdt, x_obs, y_obs)
 
         w_index = len(params_list) + 1
 
