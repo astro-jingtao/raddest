@@ -11,7 +11,7 @@ from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
 
-from ..grid_search import zoom_in_grid, gen_new_grid_mean_std
+from ..grid_search import zoom_in_grid, gen_new_grid_mean_std, grid_search
 from ..reg.constructor import (construct_generator_cond, construct_likelihood,
                                construct_linear_step, construct_log_likelihood,
                                construct_trainer, construct_ks_compare)
@@ -377,8 +377,14 @@ class RegressorLogLinearML(RegressorML):
 
 class RegressorKS(RegressorBase):
 
-    def __init__(self, xflow, yflow, func_x2y, *, parser, gen_new_grid,
-                 print_mean_std):
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 func_x2y,
+                 *,
+                 parser,
+                 print_mean_std,
+                 gen_new_grid='mean_std'):
 
         if func_x2y is None:
             raise ValueError("No function to convert x to y is provided.")
@@ -386,8 +392,31 @@ class RegressorKS(RegressorBase):
         super().__init__(xflow, yflow, func_x2y=func_x2y)
 
         self.parser = parser
-        self.gen_new_grid = gen_new_grid
         self.print_mean_std = print_mean_std
+
+        if isinstance(gen_new_grid, str):
+            self.gen_new_grid_name = gen_new_grid
+            if gen_new_grid == 'mean_std':
+                self.gen_new_grid = gen_new_grid_mean_std
+            else:
+                raise ValueError(f"Unknown gen_new_grid: {gen_new_grid}")
+        elif callable(gen_new_grid):
+            self.gen_new_grid_name = 'custom'
+            self.gen_new_grid = gen_new_grid
+
+    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+        if gen_new_grid_kwargs is None:
+            gen_new_grid_kwargs = {}
+        return gen_new_grid_kwargs
+
+    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+        if gen_new_grid_refine_kwargs is None:
+            gen_new_grid_refine_kwargs = {}
+
+        if 'n' not in gen_new_grid_refine_kwargs:
+            gen_new_grid_refine_kwargs['n'] = 20
+
+        return gen_new_grid_refine_kwargs
 
     def fit(self,
             x_obs,
@@ -403,7 +432,16 @@ class RegressorKS(RegressorBase):
             max_i=10,
             rtol=1e-3,
             atol=1e-3,
-            verbose=False):
+            verbose=False,
+            refine=True,
+            gen_new_grid_kwargs=None,
+            gen_new_grid_refine_kwargs=None):
+
+        gen_new_grid_kwargs = self._set_gen_new_grid_kwargs(
+            gen_new_grid_kwargs)
+
+        gen_new_grid_refine_kwargs = self._set_gen_new_grid_refine_kwargs(
+            gen_new_grid_refine_kwargs)
 
         x_obs = np.asarray(x_obs)
         y_obs = np.asarray(y_obs)
@@ -431,65 +469,63 @@ class RegressorKS(RegressorBase):
 
         w_index = len(params_list) + 1
 
-        return zoom_in_grid(compare,
-                            params_list,
-                            w_index,
-                            self.parser,
-                            self.gen_new_grid,
-                            self.print_mean_std,
-                            num_process=num_process,
-                            max_i=max_i,
-                            rtol=rtol,
-                            atol=atol,
-                            verbose=verbose)
+        this_gen_new_grid = partial(self.gen_new_grid, **gen_new_grid_kwargs)
+
+        res_arr = zoom_in_grid(compare,
+                               params_list,
+                               w_index,
+                               self.parser,
+                               this_gen_new_grid,
+                               self.print_mean_std,
+                               num_process=num_process,
+                               max_i=max_i,
+                               rtol=rtol,
+                               atol=atol,
+                               verbose=verbose)
+
+        if refine:
+            n_par = len(params_list)
+            params_list_refine = self.gen_new_grid(
+                res_arr,
+                n_par=n_par,
+                w_index=w_index,
+                **gen_new_grid_refine_kwargs)
+            res_arr = grid_search(compare,
+                                  params_list_refine,
+                                  self.parser,
+                                  num_process=num_process)
+        
+        return res_arr
 
 
 class RegressorLogLinearKS(RegressorKS):
 
-    def __init__(self, xflow, yflow, gen_new_grid_kwargs=None):
+    def __init__(self, xflow, yflow):
 
-        if gen_new_grid_kwargs is None:
-            gen_new_grid_kwargs = {}
+        super().__init__(xflow,
+                         yflow,
+                         func_x2y=loglinear_scatter,
+                         gen_new_grid=gen_new_grid_mean_std,
+                         parser=parser_loglinear,
+                         print_mean_std=print_mean_std_loglinear)
+
+    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+        gen_new_grid_kwargs = super()._set_gen_new_grid_kwargs(
+            gen_new_grid_kwargs)
 
         if 'range_par' not in gen_new_grid_kwargs:
             gen_new_grid_kwargs['range_par'] = [[-np.inf, np.inf],
                                                 [-np.inf, np.inf], [0, np.inf]]
 
-        gen_new_grid = partial(gen_new_grid_mean_std, **gen_new_grid_kwargs)
+        return gen_new_grid_kwargs
 
-        super().__init__(xflow,
-                         yflow,
-                         func_x2y=loglinear_scatter,
-                         gen_new_grid=gen_new_grid,
-                         parser=parser_loglinear,
-                         print_mean_std=print_mean_std_loglinear)
+    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+        gen_new_grid_refine_kwargs = super()._set_gen_new_grid_refine_kwargs(
+            gen_new_grid_refine_kwargs)
 
-    def fit(self,
-            x_obs,
-            y_obs,
-            *,
-            params_list,
-            N=1000,
-            x_range=None,
-            x_err_range=None,
-            y_range=None,
-            y_err_range=None,
-            num_process=10,
-            max_i=10,
-            rtol=1e-3,
-            atol=1e-3,
-            verbose=False):
+        if 'range_par' not in gen_new_grid_refine_kwargs:
+            gen_new_grid_refine_kwargs['range_par'] = [[-np.inf, np.inf],
+                                                       [-np.inf, np.inf],
+                                                       [0, np.inf]]
 
-        return super().fit(x_obs,
-                           y_obs,
-                           params_list=params_list,
-                           N=N,
-                           x_range=x_range,
-                           x_err_range=x_err_range,
-                           y_range=y_range,
-                           y_err_range=y_err_range,
-                           num_process=num_process,
-                           max_i=max_i,
-                           rtol=rtol,
-                           atol=atol,
-                           verbose=verbose)
+        return gen_new_grid_refine_kwargs
