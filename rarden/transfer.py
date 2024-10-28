@@ -7,24 +7,38 @@ from .tools import neg_log_plus, neg_log_plus_inv
 
 class Transfer:
 
-    def __init__(self, trans, inv, jac):
+    def __init__(self, trans, inv, jac, n_params, params_estimator=None):
         self.trans = trans
         self.inv = inv
         self.jac = jac
+        self.n_params = n_params
+        self.params_estimator = params_estimator
 
     @classmethod
     def load(cls, path, name_func_mapper=None):
         if name_func_mapper is None:
             name_func_mapper = NAME_FUNC_MAPPER
         load_dict = joblib.load(path)
-        cls_par = {k: NAME_FUNC_MAPPER[load_dict[k]] for k in load_dict}
+        cls_par = {
+            k: NAME_FUNC_MAPPER[load_dict[k]]
+            for k in ['trans', 'inv', 'jac', 'params_estimator']
+        }
+        cls_par['n_params'] = load_dict['n_params']
         return cls(**cls_par)
 
     def save(self, path):
         save_dict = {
-            'trans': self.trans.__name__,
-            'inv': self.inv.__name__,
-            'jac': self.jac.__name__
+            'trans':
+            self.trans.__name__,
+            'inv':
+            self.inv.__name__,
+            'jac':
+            self.jac.__name__,
+            'n_params':
+            self.n_params,
+            'params_estimator':
+            self.params_estimator.__name__
+            if self.params_estimator is not None else None
         }
         joblib.dump(save_dict, path)
 
@@ -57,8 +71,18 @@ def trans_neglogplus_jac(x, x_err, params):
     return k_x * k_x_err
 
 
-neglogplus = Transfer(trans_neglogplus, trans_neglogplus_inv,
-                      trans_neglogplus_jac)
+@jit
+def trans_neglogplus_estimator(x, x_err):
+    x_median = jnp.median(x)
+    x_err_median = jnp.median(x_err)
+    return x_median, x_err_median
+
+
+neglogplus = Transfer(trans_neglogplus,
+                      trans_neglogplus_inv,
+                      trans_neglogplus_jac,
+                      2,
+                      params_estimator=trans_neglogplus_estimator)
 
 # -- log_rotation --
 
@@ -94,7 +118,7 @@ def trans_log_rotation_jac(x, x_err, params):
 
 
 log_rotation = Transfer(trans_log_rotation, trans_log_rotation_inv,
-                        trans_log_rotation_jac)
+                        trans_log_rotation_jac, 1)
 
 # -- xshift_neglogplus --
 
@@ -129,7 +153,7 @@ def trans_xshift_neglogplus_jac(x, x_err, params):
 
 xshift_neglogplus = Transfer(trans_xshift_neglogplus,
                              trans_xshift_neglogplus_inv,
-                             trans_xshift_neglogplus_jac)
+                             trans_xshift_neglogplus_jac, 3)
 
 # -- neglogplus_xshift --
 
@@ -163,7 +187,7 @@ def trans_neglogplus_xshift_jac(x, x_err, params):
 
 neglogplus_xshift = Transfer(trans_neglogplus_xshift,
                              trans_neglogplus_xshift_inv,
-                             trans_neglogplus_xshift_jac)
+                             trans_neglogplus_xshift_jac, 3)
 
 all_trans_func = [
     'neglogplus', 'log_rotation', 'xshift_neglogplus', 'neglogplus_xshift'
@@ -176,3 +200,7 @@ for trans_name in all_trans_func:
     )[f'trans_{trans_name}_inv']
     NAME_FUNC_MAPPER[f'trans_{trans_name}_jac'] = globals(
     )[f'trans_{trans_name}_jac']
+
+    if f'trans_{trans_name}_estimator' in globals():
+        NAME_FUNC_MAPPER[f'trans_{trans_name}_estimator'] = globals(
+        )[f'trans_{trans_name}_estimator']

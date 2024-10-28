@@ -1,7 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
-from jax.scipy.stats import norm
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
 
@@ -88,6 +87,7 @@ def get_p_flow(flow, x, x_err):
     log_p = flow._log_prob(flow._params, jnp.c_[x, x_err],
                            jnp.zeros(shape=(x.shape[0], 1)))
     return jnp.exp(log_p)
+
 
 # ----
 @jit

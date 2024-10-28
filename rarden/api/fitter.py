@@ -1,21 +1,23 @@
 import os
-from typing import Union
 from functools import partial
+from typing import Union
 
 import jax.numpy as jnp
 import joblib
 import numpy as np
 import optax
-from jax import grad, jacrev, jit
+from jax import jit
 from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
 
-from ..grid_search import zoom_in_grid, gen_new_grid_mean_std, grid_search, get_weighted_res, gen_new_grid_quantile
-from ..reg.constructor import (construct_generator_cond, construct_likelihood,
-                               construct_linear_step, construct_log_likelihood,
-                               construct_trainer, construct_ks_compare)
-from ..reg.ks import gen_xy_obs_prepare, loglinear_scatter, parser_loglinear, print_mean_std_loglinear
+from ..grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
+                           get_weighted_res, grid_search, zoom_in_grid)
+from ..reg.constructor import (construct_generator_cond, construct_ks_compare,
+                               construct_likelihood, construct_linear_step,
+                               construct_log_likelihood, construct_trainer)
+from ..reg.ks import (gen_xy_obs_prepare, loglinear_scatter, parser_loglinear,
+                      print_mean_std_loglinear)
 from ..reg.map import get_xyw_trans_lognorm
 from ..transfer import Transfer
 from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
@@ -31,9 +33,27 @@ class FlowVI:
                  x_min=-jnp.inf,
                  x_max=jnp.inf,
                  x_err_min=-jnp.inf,
-                 x_err_max=jnp.inf):
+                 x_err_max=jnp.inf):  
         self.flow: Union[Flow, None] = flow
         self.transfer: Union[Transfer, None] = transfer
+
+        # sourcery skip: merge-else-if-into-elif
+        if self.transfer is None: # transfer not used
+            if transfer_params is not None:
+                print(
+                    "Warning: transfer_params provided, but transfer is None, the transfer_params will be ignored."
+                )
+        else: # transfer used
+            if transfer_params is None: # transfer_params not provided
+                if self.transfer.params_estimator is None:
+                    raise ValueError(
+                        "The transfer function does not have a parameter estimator, please provide transfer_params."
+                    )
+            elif len(transfer_params) != self.transfer.n_params: # transfer_params has wrong length
+                raise ValueError(
+                    "transfer_params must have the same length as the number of parameters in the transfer function."
+                )
+
         self.transfer_params = transfer_params
 
         self.x_min = x_min
@@ -76,7 +96,8 @@ class FlowVI:
             check_per_step=10,
             early_stop=True,
             max_stuck=5,
-            stuck_frac=0.05):
+            stuck_frac=0.05,
+            re_estimate_transer_params=False):  
 
         if x_min is None:
             x_min = self.x_min
@@ -86,6 +107,17 @@ class FlowVI:
             x_err_min = self.x_err_min * 0.8
         if x_err_max is None:
             x_err_max = self.x_err_max * 1.2
+
+        # sourcery skip: swap-nested-ifs, merge-nested-ifs
+        if self.transfer is not None: # transfer used
+            if re_estimate_transer_params or (self.transfer_params is None):
+                if self.transfer.params_estimator is None:
+                    raise ValueError(
+                        "The transfer function does not have a parameter estimator."
+                    )
+                else:
+                    self.transfer_params = self.transfer.params_estimator(
+                        x_obs, x_err)
 
         self.flow, self.loss, _ = nf_fit_general(
             x_obs,

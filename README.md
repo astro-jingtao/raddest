@@ -1,31 +1,41 @@
-## How to use
+# rarden 
 
-### Functional programming
+The JAX-based Python implementation of the RARDEN (Regression for Astronomical data with Realistic Distributions, Errors and Non-linearity) algorithm.
 
-**Fit $p(x)$**
+## Installation
 
-Here we use the `neglogplus` as pre-NF transformation.
+It is recommended to use a Python virtual environment to install and run `rarden`.
+First, create a virtual environment:
 
-```python
-from nreg.x_xerr import nf_fit_trans_neglogplus, gen_xobs_trans_neglogplus
+```
+conda create -n rarden
+conda activate rarden
+```
 
-# fit the NF
-flow, loss, params = nf_fit_trans_neglogplus(x_obs,
-                        x_err,
-                        optimizer=None,
-                        n_pre=100,
-                        n_train=500,
-                        n_node=21,
-                        verbose=False,
-                        flow=None,
-                        x_min=0,
-                        x_max=15,
-                        x_err_min=0,
-                        x_err_max=5,
-                        check_per_step=10,
-                        early_stop=True,
-                        max_stuck=5,
-                        stuck_frac=0.05)
-# generate data by using fitted NF
-x_gen, x_err_gen, x_obs_gen = gen_xobs_trans_neglogplus(flow, 10000, 0, x_obs.max(), 0, x_err.max(), params, return_numpy=True)
+Install the `JAX` package following the instructions on the [official website](https://jax.readthedocs.io/en/latest/installation.html). Choose CPU or GPU version based on your hardware, the GPU version is recommended (if your machine supports it) for faster computation.
+
+Then, install `rarden` using pip:
+
+```
+pip install git+https://github.com/astro-jingtao/rarden.git
+```
+
+Another package `ndtest` is required for using the `rarden` package. Install it using pip:  
+
+```
+pip install git+https://github.com/astro-jingtao/ndtest.git
+```
+
+Now. `rarden` should be ready to use.
+
+## Usage
+
+See the notebook in the `examples` folder for an example usage of `rarden`.
+
+## Citation
+
+If you use `rarden` in your research, please cite the following paper:
+
+```
+TBD
 ```

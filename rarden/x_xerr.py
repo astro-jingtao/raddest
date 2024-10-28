@@ -10,8 +10,9 @@ from jax import grad, jit
 from jax.scipy.special import logsumexp
 from pzflow import Flow
 
-from .tools import (get_ext_w, get_ext_w_qmc, shrink_gg)
-from .transfer import Transfer, neglogplus, log_rotation, xshift_neglogplus, neglogplus_xshift
+from .tools import get_ext_w, get_ext_w_qmc, shrink_gg
+from .transfer import (Transfer, log_rotation, neglogplus, neglogplus_xshift,
+                       xshift_neglogplus)
 
 
 def nf_fit_frame(u_ext,
