@@ -66,6 +66,11 @@ def zoom_in_grid(func,
     return res_arr
 
 
+def gen_grid(cen, d_low, d_up, n, _range):
+    return np.linspace(max(_range[0], cen - d_low), min(_range[1], cen + d_up),
+                       n)
+
+
 def gen_new_grid_mean_std(res_arr,
                           *,
                           n_par,
@@ -84,7 +89,7 @@ def gen_new_grid_mean_std(res_arr,
         n_sigma = [n_sigma] * n_par
     if isinstance(d_par_min, (int, float)):
         d_par_min = [d_par_min] * n_par
-    
+
     if range_par is None:
         range_par = [[-np.inf, np.inf] * n_par]
 
@@ -93,38 +98,46 @@ def gen_new_grid_mean_std(res_arr,
     for i in range(n_par):
         d_this_par = max(d_par_min[i], n_sigma[i] * res_std[i])
         new_list.append(
-            np.linspace(max(range_par[i][0], res_mean[i] - d_this_par),
-                        min(range_par[i][1], res_mean[i] + d_this_par), n[i]))
+            gen_grid(res_mean[i], d_this_par, d_this_par, n[i], range_par[i]))
 
     return new_list
 
 
-# TODO: to update
-def gen_new_grid_quantile(res_arr, n=10, _min_range=0.1):
-    q_list = []
-    for i in range(3):
-        q_16, q_50, q_84 = quantile(res_arr[:, i], [0.16, 0.5, 0.84],
-                                    weights=res_arr[:, 4])
-        q_list.append((q_16, q_50, q_84))
-    q_list = np.array(q_list)
+def gen_new_grid_quantile(res_arr,
+                          n_par,
+                          w_index,
+                          n=10,
+                          q_low=0.16,
+                          q_up=0.84,
+                          d_par_min=0.2,
+                          range_par=None):
+    
+    # if n, n_sigma, d_par_min are integers/floats, we convert them to lists of integers
+    if isinstance(n, (int, float)):
+        n = [n] * n_par
+    if isinstance(q_low, (int, float)):
+        q_low = [q_low] * n_par
+    if isinstance(q_up, (int, float)):
+        q_up = [q_up] * n_par
+    if isinstance(d_par_min, (int, float)):
+        d_par_min = [d_par_min] * n_par
 
-    k_med = q_list[0, 1]
-    k_low = max(k_med - q_list[0, 0], _min_range)
-    k_up = max(q_list[0, 2] - k_med, _min_range)
-    k_list = np.linspace(k_med - 3 * k_low, k_med + 3 * k_up, n)
+    if range_par is None:
+        range_par = [[-np.inf, np.inf] * n_par]
 
-    b_med = q_list[1, 1]
-    b_low = max(b_med - q_list[1, 0], _min_range)
-    b_up = max(q_list[1, 2] - b_med, _min_range)
-    b_list = np.linspace(b_med - 3 * b_low, b_med + 3 * b_up, n)
+    new_list = []
 
-    sig_med = q_list[2, 1]
-    sig_low = max(sig_med - q_list[2, 0], _min_range)
-    sig_up = max(q_list[2, 2] - sig_med, _min_range)
-    sig_list = np.linspace(max(0, sig_med - 3 * sig_low), sig_med + 3 * sig_up,
-                           n)
+    for i in range(n_par):
+        q_low_value, med, q_up_value = quantile(res_arr[:, i],
+                                                [q_low[i], 0.5, q_up[i]],
+                                                weights=res_arr[:, w_index])
+        d_low = max(d_par_min[i], med - q_low_value)
+        d_up = max(d_par_min[i], q_up_value - med)
 
-    return (k_list, b_list, sig_list)
+        new_list.append(
+            gen_grid(med, d_low, d_up, n[i], range_par[i]))
+
+    return new_list
 
 
 def flag_bad(x):

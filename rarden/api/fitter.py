@@ -11,7 +11,7 @@ from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
 
-from ..grid_search import zoom_in_grid, gen_new_grid_mean_std, grid_search
+from ..grid_search import zoom_in_grid, gen_new_grid_mean_std, grid_search, get_weighted_res, gen_new_grid_quantile
 from ..reg.constructor import (construct_generator_cond, construct_likelihood,
                                construct_linear_step, construct_log_likelihood,
                                construct_trainer, construct_ks_compare)
@@ -398,6 +398,8 @@ class RegressorKS(RegressorBase):
             self.gen_new_grid_name = gen_new_grid
             if gen_new_grid == 'mean_std':
                 self.gen_new_grid = gen_new_grid_mean_std
+            elif gen_new_grid == 'quantile':
+                self.gen_new_grid = gen_new_grid_quantile
             else:
                 raise ValueError(f"Unknown gen_new_grid: {gen_new_grid}")
         elif callable(gen_new_grid):
@@ -494,20 +496,24 @@ class RegressorKS(RegressorBase):
                                   params_list_refine,
                                   self.parser,
                                   num_process=num_process)
-        
-        return res_arr
+
+        params_mean, params_std = get_weighted_res(res_arr[:, :n_par].T,
+                                                   res_arr[:, w_index],
+                                                   std_min=0)
+
+        return params_mean, params_std, res_arr
 
 
 class RegressorLogLinearKS(RegressorKS):
 
-    def __init__(self, xflow, yflow):
+    def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
 
         super().__init__(xflow,
                          yflow,
                          func_x2y=loglinear_scatter,
-                         gen_new_grid=gen_new_grid_mean_std,
                          parser=parser_loglinear,
-                         print_mean_std=print_mean_std_loglinear)
+                         print_mean_std=print_mean_std_loglinear,
+                         gen_new_grid=gen_new_grid)
 
     def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
         gen_new_grid_kwargs = super()._set_gen_new_grid_kwargs(
