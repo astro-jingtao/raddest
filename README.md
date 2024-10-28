@@ -8,9 +8,11 @@ It is recommended to use a Python virtual environment to install and run `rarden
 First, create a virtual environment:
 
 ```
-conda create -n rarden
+conda create -n rarden python=3.9
 conda activate rarden
 ```
+
+The Python version 3.9 is the development version of `rarden`, and the higher version of Python should also work. If you find any issues with higher versions, please let me know by raising an issue.
 
 Install the `JAX` package following the instructions on the [official website](https://jax.readthedocs.io/en/latest/installation.html). Choose CPU or GPU version based on your hardware, the GPU version is recommended (if your machine supports it) for faster computation.
 
