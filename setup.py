@@ -8,6 +8,7 @@ setup(
     description=
     "Regression for Astronomical data with Realistic Distributions, Errors and Non-linearity",
     packages=find_packages(),
+    python_requires='>=3.9',
     install_requires=[
         'numpy', 'joblib', 'pzflow', 'optax', 'scipy', 'statsmodels'
     ])

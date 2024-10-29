@@ -12,7 +12,9 @@ conda create -n rarden python=3.9
 conda activate rarden
 ```
 
-The Python version 3.9 is the development version of `rarden`, and the higher version of Python should also work. If you find any issues with higher versions, please let me know by raising an issue.
+The `python==3.9` is the development version of `rarden`, and the `python>3.9` should also work. If you find any issues with higher versions, please let me know by raising an issue.
+
+The `python<3.9` is not supported due to the requirement of `optax`.
 
 Install the `JAX` package following the instructions on the [official website](https://jax.readthedocs.io/en/latest/installation.html). Choose CPU or GPU version based on your hardware, the GPU version is recommended (if your machine supports it) for faster computation.
 
@@ -22,11 +24,8 @@ Then, install `rarden` using pip:
 pip install git+https://github.com/astro-jingtao/rarden.git
 ```
 
-Another package `ndtest` is required for using the `rarden` package. Install it using pip:  
+Another package `ndtest` is required for using the `rarden` package. Install it following the instructions in [astro-jingtao/ndtest](https://github.com/astro-jingtao/ndtest?tab=readme-ov-file#installation) (or [its gitee mirror](https://gitee.com/the-wind-is-still-like-snow/ndtest#installation) for the user have trouble with using github).
 
-```
-pip install git+https://github.com/astro-jingtao/ndtest.git
-```
 
 Now. `rarden` should be ready to use.
 
