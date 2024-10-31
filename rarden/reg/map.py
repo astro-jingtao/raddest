@@ -1,30 +1,35 @@
 from typing import Union
 
+
 import jax.numpy as jnp
 import numpy as np
 from jax.scipy.stats import gaussian_kde
 
 from ..tools import get_ext_w_2d, get_p_flow
-from ..transfer import Transfer, neglogplus
+from ..transfer import Transfer
 
 
-def get_xyw_trans_lognorm(x_obs,
-                          y_obs,
-                          x_err,
-                          y_err,
-                          flowx,
-                          flowy,
-                          x_range,
-                          x_err_range,
-                          y_range,
-                          y_err_range,
-                          x_transfer: Union[Transfer, None] = None,
-                          x_transfer_params=None,
-                          y_transfer: Union[Transfer, None] = None,
-                          y_transfer_params=None,
-                          n=21):
+def get_xyw_trans(x_obs,
+                  y_obs,
+                  x_err,
+                  y_err,
+                  flowx,
+                  flowy,
+                  x_range,
+                  x_err_range,
+                  y_range,
+                  y_err_range,
+                  kde_batch_size=None,
+                  get_w_add=None,
+                  x_transfer: Union[Transfer, None] = None,
+                  x_transfer_params=None,
+                  y_transfer: Union[Transfer, None] = None,
+                  y_transfer_params=None,
+                  n=21):
     '''
     Here x_range, x_err_range, y_range, y_err_range are for original varibles, not transformed ones.
+
+    get_w_add: callable, (x_ext, y_ext, x_err_ext, y_err_ext) -> w_add, additional weight for each point.
     '''
 
     # x, x_err | y, y_err <-> u, v
@@ -85,7 +90,13 @@ def get_xyw_trans_lognorm(x_obs,
                                                 vy_sample,
                                                 params=y_transfer_params)
     kernel_y = gaussian_kde(y_sample)
-    py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
+
+    if kde_batch_size is None:
+        py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
+    else:
+        py = kde_pdf_batch(kernel_y,
+                           _y_ext.flatten(),
+                           batch_size=kde_batch_size).reshape(s1, s2)
 
     if y_transfer is None:
         py_yerr = get_p_flow(flowy, uy_ext.flatten(),
@@ -100,37 +111,34 @@ def get_xyw_trans_lognorm(x_obs,
     wy = jnp.where(is_in_range, py_yerr / (py + eps), 0)
     wy = jnp.nan_to_num(wy, nan=0)
 
-    w = _w.reshape(1, -1) * px_xerr / _y_ext / np.log(10) * wy
+    if get_w_add is None:
+        w_add = 1
+    else:
+        w_add = get_w_add(_x_ext, _y_ext, _x_err_ext, _y_err_ext)
+        # w_add = 1 / _y_ext / np.log(10)
+
+    w = _w.reshape(1, -1) * px_xerr * wy * w_add
     w = jnp.where(is_in_range, w, 0)
 
     return jnp.array(_x_ext), jnp.array(_y_ext), jnp.array(w)
 
 
-def get_xyw_trans_neglogplus_lognorm(x_obs,
-                                     y_obs,
-                                     x_err,
-                                     y_err,
-                                     flowx,
-                                     flowy,
-                                     x_range,
-                                     x_err_range,
-                                     y_range,
-                                     y_err_range,
-                                     x_transfer_params,
-                                     y_transfer_params,
-                                     n=21):
-    return get_xyw_trans_lognorm(x_obs,
-                                 y_obs,
-                                 x_err,
-                                 y_err,
-                                 flowx,
-                                 flowy,
-                                 x_range,
-                                 x_err_range,
-                                 y_range,
-                                 y_err_range,
-                                 x_transfer=neglogplus,
-                                 x_transfer_params=x_transfer_params,
-                                 y_transfer=neglogplus,
-                                 y_transfer_params=y_transfer_params,
-                                 n=n)
+def get_w_add_lognorm(x_ext, y_ext, x_err_ext, y_err_ext):
+    return 1 / y_ext / np.log(10)
+
+
+def kde_pdf_batch(kernel, x, batch_size=100000):
+    n = x.shape[0]
+    pdf = jnp.zeros(n)
+
+    # Calculate the number of batches
+    num_batches = int(jnp.ceil(n / batch_size))  # This ensures we round up
+
+    for i in range(num_batches):
+        # print(f"Calculating batch {i+1}/{num_batches}")
+        batch_start = i * batch_size
+        batch_end = min(batch_start + batch_size, n)
+        pdf_batch = kernel(x[batch_start:batch_end])
+        pdf = pdf.at[batch_start:batch_end].set(pdf_batch)
+
+    return pdf

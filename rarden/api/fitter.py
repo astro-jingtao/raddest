@@ -18,7 +18,7 @@ from ..reg.constructor import (construct_generator_cond, construct_ks_compare,
                                construct_log_likelihood, construct_trainer)
 from ..reg.ks import (gen_xy_obs_prepare, loglinear_scatter, parser_loglinear,
                       print_mean_std_loglinear)
-from ..reg.map import get_xyw_trans_lognorm
+from ..reg.map import get_xyw_trans, get_w_add_lognorm
 from ..transfer import Transfer
 from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
                       gen_xobs_trans, nf_fit_general)
@@ -33,23 +33,25 @@ class FlowVI:
                  x_min=-jnp.inf,
                  x_max=jnp.inf,
                  x_err_min=-jnp.inf,
-                 x_err_max=jnp.inf):  
+                 x_err_max=jnp.inf):
         self.flow: Union[Flow, None] = flow
         self.transfer: Union[Transfer, None] = transfer
 
         # sourcery skip: merge-else-if-into-elif
-        if self.transfer is None: # transfer not used
+        if self.transfer is None:  # transfer not used
             if transfer_params is not None:
                 print(
                     "Warning: transfer_params provided, but transfer is None, the transfer_params will be ignored."
                 )
-        else: # transfer used
-            if transfer_params is None: # transfer_params not provided
+        else:  # transfer used
+            if transfer_params is None:  # transfer_params not provided
                 if self.transfer.params_estimator is None:
                     raise ValueError(
                         "The transfer function does not have a parameter estimator, please provide transfer_params."
                     )
-            elif len(transfer_params) != self.transfer.n_params: # transfer_params has wrong length
+            elif len(
+                    transfer_params
+            ) != self.transfer.n_params:  # transfer_params has wrong length
                 raise ValueError(
                     "transfer_params must have the same length as the number of parameters in the transfer function."
                 )
@@ -97,7 +99,7 @@ class FlowVI:
             early_stop=True,
             max_stuck=5,
             stuck_frac=0.05,
-            re_estimate_transer_params=False):  
+            re_estimate_transer_params=False):
 
         if x_min is None:
             x_min = self.x_min
@@ -109,7 +111,7 @@ class FlowVI:
             x_err_max = self.x_err_max * 1.2
 
         # sourcery skip: swap-nested-ifs, merge-nested-ifs
-        if self.transfer is not None: # transfer used
+        if self.transfer is not None:  # transfer used
             if re_estimate_transer_params or (self.transfer_params is None):
                 if self.transfer.params_estimator is None:
                     raise ValueError(
@@ -325,7 +327,14 @@ class RegressorBase:
 
 class RegressorML(RegressorBase):
 
-    def __init__(self, xflow, yflow, p_cond, step_constructor, func_x2y=None):
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 *,
+                 p_cond,
+                 step_constructor,
+                 get_w_add=None,
+                 func_x2y=None):
 
         super().__init__(xflow, yflow, func_x2y=func_x2y)
 
@@ -333,6 +342,7 @@ class RegressorML(RegressorBase):
         self.log_likelihood, self.d_log_likelihood, self.dd_log_likelihood = construct_log_likelihood(
             self.likelihhod)
         self.step = step_constructor(self.d_log_likelihood)
+        self.get_w_add = get_w_add
         self.trainer = construct_trainer(self.log_likelihood, self.step)
 
     def fit(self,
@@ -346,6 +356,7 @@ class RegressorML(RegressorBase):
             x_err_range=None,
             y_range=None,
             y_err_range=None,
+            kde_batch_size=None,
             lr=1e-3,
             n_step=10000,
             atol=1e-3,
@@ -355,7 +366,7 @@ class RegressorML(RegressorBase):
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
 
-        x_ext, y_ext, w = get_xyw_trans_lognorm(
+        x_ext, y_ext, w = get_xyw_trans(
             x_obs,
             y_obs,
             x_err,
@@ -366,6 +377,8 @@ class RegressorML(RegressorBase):
             x_err_range,
             y_range,
             y_err_range,
+            kde_batch_size=kde_batch_size,
+            get_w_add=self.get_w_add,
             x_transfer=self.xflow.transfer,
             x_transfer_params=self.xflow.transfer_params,
             y_transfer=self.yflow.transfer,
@@ -402,8 +415,9 @@ class RegressorLogLinearML(RegressorML):
 
         super().__init__(xflow,
                          yflow,
-                         lognorm,
-                         construct_linear_step,
+                         p_cond=lognorm,
+                         step_constructor=construct_linear_step,
+                         get_w_add=get_w_add_lognorm,
                          func_x2y=loglinear_scatter)
 
 
