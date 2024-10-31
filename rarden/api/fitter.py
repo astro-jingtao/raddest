@@ -34,7 +34,6 @@ class FlowVI:
                  x_max=jnp.inf,
                  x_err_min=-jnp.inf,
                  x_err_max=jnp.inf):
-                 x_err_max=jnp.inf):
         self.flow: Union[Flow, None] = flow
         self.transfer: Union[Transfer, None] = transfer
 
@@ -44,8 +43,6 @@ class FlowVI:
                 print(
                     "Warning: transfer_params provided, but transfer is None, the transfer_params will be ignored."
                 )
-        else:  # transfer used
-            if transfer_params is None:  # transfer_params not provided
         else:  # transfer used
             if transfer_params is None:  # transfer_params not provided
                 if self.transfer.params_estimator is None:
