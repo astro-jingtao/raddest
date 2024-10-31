@@ -42,3 +42,9 @@ If you use `rarden` in your research, please cite the following paper:
 ```
 TBD
 ```
+
+## Acknowledge
+
+Tao Jing thanks Ce Sui, Kai Wang, Kangning Diao, Yangyao Chen, and Zechang Sun for various fruitful discussions about this project.
+
+Tao Jing thanks Ce Sui, Junkai Zhang, and Qinglin Ma for early test of this package.

@@ -10,6 +10,7 @@
   - https://github.com/google-deepmind/optax/issues/711
 - install `matplotlib` and `ipykernel` when create environment in README. 
   - These two packages are required for running the examples. If `matplotlib` is installed at the end (by conda), it may lead to the conflict of the version of `numpy` and `numpy-base`.
+- Acknowledge in README
 
 ### Changed
 

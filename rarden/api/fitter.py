@@ -33,23 +33,25 @@ class FlowVI:
                  x_min=-jnp.inf,
                  x_max=jnp.inf,
                  x_err_min=-jnp.inf,
-                 x_err_max=jnp.inf):  
+                 x_err_max=jnp.inf):
         self.flow: Union[Flow, None] = flow
         self.transfer: Union[Transfer, None] = transfer
 
         # sourcery skip: merge-else-if-into-elif
-        if self.transfer is None: # transfer not used
+        if self.transfer is None:  # transfer not used
             if transfer_params is not None:
                 print(
                     "Warning: transfer_params provided, but transfer is None, the transfer_params will be ignored."
                 )
-        else: # transfer used
-            if transfer_params is None: # transfer_params not provided
+        else:  # transfer used
+            if transfer_params is None:  # transfer_params not provided
                 if self.transfer.params_estimator is None:
                     raise ValueError(
                         "The transfer function does not have a parameter estimator, please provide transfer_params."
                     )
-            elif len(transfer_params) != self.transfer.n_params: # transfer_params has wrong length
+            elif get_params_len(
+                    transfer_params
+            ) != self.transfer.n_params:  # transfer_params has wrong length
                 raise ValueError(
                     "transfer_params must have the same length as the number of parameters in the transfer function."
                 )
@@ -97,7 +99,7 @@ class FlowVI:
             early_stop=True,
             max_stuck=5,
             stuck_frac=0.05,
-            re_estimate_transer_params=False):  
+            re_estimate_transer_params=False):
 
         if x_min is None:
             x_min = self.x_min
@@ -109,7 +111,7 @@ class FlowVI:
             x_err_max = self.x_err_max * 1.2
 
         # sourcery skip: swap-nested-ifs, merge-nested-ifs
-        if self.transfer is not None: # transfer used
+        if self.transfer is not None:  # transfer used
             if re_estimate_transer_params or (self.transfer_params is None):
                 if self.transfer.params_estimator is None:
                     raise ValueError(
@@ -355,6 +357,7 @@ class RegressorML(RegressorBase):
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
 
+        # TODO: use the get_xyw_trans for any correlation, not just lognorm
         x_ext, y_ext, w = get_xyw_trans_lognorm(
             x_obs,
             y_obs,
@@ -393,8 +396,17 @@ class RegressorLogLinearML(RegressorML):
 
         @jit
         def lognorm(x, y, params):
-            # if (x < 0) or (y < 0) return 0, else gaussian(log10y - get_loc(log10x, params), get_scale(params))
-            # params: (k, b, ...), sig
+            '''
+            params: (...), sig
+
+            return: 
+            if (x < 0) or (y < 0) -> 0
+            else -> gaussian(log10(y)|loc(x, params[:-1]), params[:-1])
+
+            notes:
+            This is p(log10(y)|loc, scale), while p(y|loc, scale) = p(log10(y)|loc, scale)/y/ln(10)
+            Addtional cofficients should be absorbed in weight
+            '''
             return jnp.where((x < 0) | (y < 0), 0,
                              norm.pdf(jnp.log10(jnp.abs(y)),
                                       loc=loglinear_jax(x, params[:-1]),
@@ -567,3 +579,7 @@ class RegressorLogLinearKS(RegressorKS):
                                                        [0, np.inf]]
 
         return gen_new_grid_refine_kwargs
+
+
+def get_params_len(params):
+    return 1 if isinstance(params, (int, float)) else len(params)
