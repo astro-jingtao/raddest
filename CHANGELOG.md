@@ -1,6 +1,6 @@
 # Change Log
 
-## [Unreleased]
+## 0.2.0 - 2024-10-31
 
 ### Added
 
@@ -11,12 +11,15 @@
 - install `matplotlib` and `ipykernel` when create environment in README. 
   - These two packages are required for running the examples. If `matplotlib` is installed at the end (by conda), it may lead to the conflict of the version of `numpy` and `numpy-base`.
 - Acknowledge in README
+- Add `pyproject.toml`
+- Support apply KDE in batch in `RegressorML.fit()` and `get_xyw_trans` to avoid OOM.
 
 ### Changed
 
 - Link the installation of `ndtest` to its own README.
+- Add `get_xyw_trans` in `map.py` for general correlation. 
 
-## 0.0.1 - 2024-10-28
+## 0.1.0 - 2024-10-28
 
 ### Added
 
