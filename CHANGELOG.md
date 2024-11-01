@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.3.0 - 2024-11-01
+
+### Added
+
+- `RegressorLinearML`, `RegressorLinearKS`, and corresponding example.
+- Add `utils` in example to make it more clean.
+- Add `self.log_likelihood`, `self.log_posterior` methods for `RegressorML`.
+- Use `corner` in example to showcase the posterior.
+
+
 ## 0.2.0 - 2024-10-31
 
 ### Added

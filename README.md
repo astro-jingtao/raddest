@@ -7,7 +7,7 @@ The JAX-based Python implementation of the RARDEN (Regression for Astronomical d
 It is recommended to use a Python virtual environment to install and run `rarden`.
 First, create a virtual environment:
 
-```
+```bash
 conda create -n rarden python=3.9 matplotlib ipykernel
 conda activate rarden
 ```
@@ -22,7 +22,7 @@ Install the `JAX` package following the instructions on the [official website](h
 
 Then, install `rarden` using pip:
 
-```
+```bash
 pip install git+https://github.com/astro-jingtao/rarden.git
 ```
 
@@ -34,6 +34,11 @@ Now. `rarden` should be ready to use.
 ## Usage
 
 See the notebook in the `examples` folder for an example usage of `rarden`.
+
+You need `corner` to run these examples. If you don't have, install it by
+```bash
+pip install corner
+```
 
 ## Citation
 

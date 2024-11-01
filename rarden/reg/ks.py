@@ -3,7 +3,6 @@ from typing import Union
 import numpy as np
 from ndtest.ksnd import ks2d2s
 
-from ..grid_search import get_weighted_res
 from ..transfer import Transfer, neglogplus
 from ..x_xerr import gen_xobs_trans
 from .constructor import construct_generator_cond
@@ -62,8 +61,13 @@ def loglinear_scatter(x, params):
         10,
         k * np.log10(x) + b + np.random.normal(scale=sig, size=x.shape))
 
-
 loglinear_generator_cond = construct_generator_cond(loglinear_scatter)
+
+def linear_scatter(x, params):
+    k, b, sig = params
+    return k * x + b + np.random.normal(scale=sig, size=x.shape)
+
+linear_generator_cond = construct_generator_cond(linear_scatter)
 
 
 def loglinear_x2y(x, x_obs, y_kdt, y_err_kdt, k, b, sig, return_more=False):
@@ -194,7 +198,7 @@ def compare_loglinear(k,
                                 n_jobs=n_jobs)
 
 
-def parser_loglinear(res, iargs):
+def parser_anylinear(res, iargs):
     res_arr = np.zeros((len(res), 5))
     for i, (r, a) in enumerate(zip(res, iargs)):
         res_arr[i, :] = (*a, r[0], r[1])

@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import joblib
 import numpy as np
 import optax
-from jax import jit
+from jax import jit, vmap
 from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
@@ -16,9 +16,9 @@ from ..grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
 from ..reg.constructor import (construct_generator_cond, construct_ks_compare,
                                construct_likelihood, construct_linear_step,
                                construct_log_likelihood, construct_trainer)
-from ..reg.ks import (gen_xy_obs_prepare, loglinear_scatter, parser_loglinear,
-                      print_mean_std_loglinear)
-from ..reg.map import get_xyw_trans, get_w_add_lognorm
+from ..reg.ks import (gen_xy_obs_prepare, linear_scatter, loglinear_scatter,
+                      parser_anylinear, print_mean_std_loglinear)
+from ..reg.map import get_w_add_lognorm, get_xyw_trans
 from ..transfer import Transfer
 from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
                       gen_xobs_trans, nf_fit_general)
@@ -106,9 +106,9 @@ class FlowVI:
         if x_max is None:
             x_max = self.x_max
         if x_err_min is None:
-            x_err_min = self.x_err_min * 0.8
+            x_err_min = self.x_err_min
         if x_err_max is None:
-            x_err_max = self.x_err_max * 1.2
+            x_err_max = self.x_err_max
 
         # sourcery skip: swap-nested-ifs, merge-nested-ifs
         if self.transfer is not None:  # transfer used
@@ -155,6 +155,13 @@ class FlowVI:
                x_err_min=None,
                x_err_max=None,
                return_numpy=False):
+        '''
+        
+        return:
+            x_gen: generated x values
+            x_err_gen: generated x error values
+            x_obs_gen: generated x observation values
+        '''
 
         self.check_fit()
 
@@ -325,6 +332,7 @@ class RegressorBase:
         return x_obs_gen, y_obs_gen, x_err_gen, y_err_gen, x_gen, y_gen
 
 
+# TODO: cache x_ext, y_ext, w ?
 class RegressorML(RegressorBase):
 
     def __init__(self,
@@ -334,34 +342,47 @@ class RegressorML(RegressorBase):
                  p_cond,
                  step_constructor,
                  get_w_add=None,
-                 func_x2y=None):
+                 func_x2y=None,
+                 log_prior=None):
+        '''
+        log_prior: callable, log_prior(params) -> log(P(params))
+        '''
 
         super().__init__(xflow, yflow, func_x2y=func_x2y)
 
-        self.likelihhod = construct_likelihood(p_cond)
-        self.log_likelihood, self.d_log_likelihood, self.dd_log_likelihood = construct_log_likelihood(
-            self.likelihhod)
-        self.step = step_constructor(self.d_log_likelihood)
-        self.get_w_add = get_w_add
-        self.trainer = construct_trainer(self.log_likelihood, self.step)
+        self._likelihood_ext = construct_likelihood(p_cond)
+        self._log_likelihood_ext, self._d_log_likelihood_ext, self._dd_log_likelihood_ext = construct_log_likelihood(
+            self._likelihood_ext)
+        self._v_log_likelihood_ext = vmap(self._log_likelihood_ext,
+                                          in_axes=(0, None, None, None))
 
-    def fit(self,
-            x_obs,
-            x_err,
-            y_obs,
-            y_err,
-            params_0,
-            n=21,
-            x_range=None,
-            x_err_range=None,
-            y_range=None,
-            y_err_range=None,
-            kde_batch_size=None,
-            lr=1e-3,
-            n_step=10000,
-            atol=1e-3,
-            rtol=1e-3,
-            verbose=False):
+        self.step = step_constructor(self._d_log_likelihood_ext)
+        self.get_w_add = get_w_add
+        self.trainer = construct_trainer(self._log_likelihood_ext, self.step)
+        self.log_prior = log_prior if log_prior is not None else lambda params: 0.0
+
+        @jit
+        def _log_posterior_ext(params, x_ext, y_ext, w, n_sample):
+            # we use the mean of the log-likelihood as the loss
+            # here we multiply the number of samples to get the truu log-likelihood
+            return self._log_likelihood_ext(
+                params, x_ext, y_ext, w) * n_sample + self.log_prior(params)
+
+        self._log_posterior_ext = _log_posterior_ext
+        self._v_log_posterior_ext = vmap(_log_posterior_ext,
+                                         in_axes=(0, None, None, None, None))
+
+    def get_ext_data(self,
+                     x_obs,
+                     x_err,
+                     y_obs,
+                     y_err,
+                     n=21,
+                     x_range=None,
+                     x_err_range=None,
+                     y_range=None,
+                     y_err_range=None,
+                     kde_batch_size=None):
 
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
@@ -385,6 +406,95 @@ class RegressorML(RegressorBase):
             y_transfer_params=self.yflow.transfer_params,
             n=n)
 
+        return x_ext, y_ext, w
+
+    def log_likelihood(self,
+                       x_obs,
+                       x_err,
+                       y_obs,
+                       y_err,
+                       params,
+                       n=21,
+                       x_range=None,
+                       x_err_range=None,
+                       y_range=None,
+                       y_err_range=None,
+                       kde_batch_size=None):
+
+        x_ext, y_ext, w = self.get_ext_data(x_obs,
+                                            x_err,
+                                            y_obs,
+                                            y_err,
+                                            n=n,
+                                            x_range=x_range,
+                                            x_err_range=x_err_range,
+                                            y_range=y_range,
+                                            y_err_range=y_err_range,
+                                            kde_batch_size=kde_batch_size)
+
+        n_sample = x_obs.size
+        # we use the mean of the log-likelihood as the loss
+        # here we multiply the number of samples to get the truu log-likelihood
+
+        return self._v_log_likelihood_ext(self._get_v_params(params), x_ext,
+                                          y_ext, w) * n_sample
+
+    def log_posterior(self,
+                      x_obs,
+                      x_err,
+                      y_obs,
+                      y_err,
+                      params,
+                      n=21,
+                      x_range=None,
+                      x_err_range=None,
+                      y_range=None,
+                      y_err_range=None,
+                      kde_batch_size=None):
+
+        x_ext, y_ext, w = self.get_ext_data(x_obs,
+                                            x_err,
+                                            y_obs,
+                                            y_err,
+                                            n=n,
+                                            x_range=x_range,
+                                            x_err_range=x_err_range,
+                                            y_range=y_range,
+                                            y_err_range=y_err_range,
+                                            kde_batch_size=kde_batch_size)
+        n_sample = x_obs.size
+        return self._v_log_posterior_ext(self._get_v_params(params), x_ext,
+                                         y_ext, w, n_sample)
+
+    def fit(self,
+            x_obs,
+            x_err,
+            y_obs,
+            y_err,
+            params_0,
+            n=21,
+            x_range=None,
+            x_err_range=None,
+            y_range=None,
+            y_err_range=None,
+            kde_batch_size=None,
+            lr=1e-3,
+            n_step=10000,
+            atol=1e-3,
+            rtol=1e-3,
+            verbose=False):
+
+        x_ext, y_ext, w = self.get_ext_data(x_obs,
+                                            x_err,
+                                            y_obs,
+                                            y_err,
+                                            n=n,
+                                            x_range=x_range,
+                                            x_err_range=x_err_range,
+                                            y_range=y_range,
+                                            y_err_range=y_err_range,
+                                            kde_batch_size=kde_batch_size)
+
         return self.trainer(params_0,
                             x_ext,
                             y_ext,
@@ -395,10 +505,16 @@ class RegressorML(RegressorBase):
                             rtol=rtol,
                             verbose=verbose)
 
+    def _get_v_params(self, params):
+        params = jnp.asarray(params)
+        if params.ndim == 1:
+            params = params[None, :]
+        return params
+
 
 class RegressorLogLinearML(RegressorML):
 
-    def __init__(self, xflow, yflow):
+    def __init__(self, xflow, yflow, log_prior=None):
 
         @jit
         def loglinear_jax(x, params):
@@ -411,7 +527,7 @@ class RegressorLogLinearML(RegressorML):
 
             return: 
             if (x < 0) or (y < 0) -> 0
-            else -> gaussian(log10(y)|loc(x, params[:-1]), params[:-1])
+            else -> gaussian(log10(y)|loc(x, params[:-1]), params[-1])
 
             notes:
             This is p(log10(y)|loc, scale), while p(y|loc, scale) = p(log10(y)|loc, scale)/y/ln(10)
@@ -422,12 +538,49 @@ class RegressorLogLinearML(RegressorML):
                                       loc=loglinear_jax(x, params[:-1]),
                                       scale=params[-1]))
 
+        if log_prior is None:
+
+            def log_prior(params):
+                return jnp.where(params[-1] < 0, -jnp.inf, 0)
+
         super().__init__(xflow,
                          yflow,
                          p_cond=lognorm,
                          step_constructor=construct_linear_step,
                          get_w_add=get_w_add_lognorm,
-                         func_x2y=loglinear_scatter)
+                         func_x2y=loglinear_scatter,
+                         log_prior=log_prior)
+
+
+class RegressorLinearML(RegressorML):
+
+    def __init__(self, xflow, yflow):
+
+        @jit
+        def linear_jax(x, params):
+            return params[0] * x + params[1]
+
+        @jit
+        def linearnorm(x, y, params):
+            '''
+            params: (...), sig
+
+            return: 
+            gaussian(y|loc(x, params[:-1]), params[-1])
+
+            notes:
+            No addtinonal cofficients needed
+            '''
+            return norm.pdf(y,
+                            loc=linear_jax(x, params[:-1]),
+                            scale=params[-1])
+
+        super().__init__(xflow,
+                         yflow,
+                         p_cond=linearnorm,
+                         step_constructor=construct_linear_step,
+                         get_w_add=None,
+                         func_x2y=linear_scatter)
 
 
 class RegressorKS(RegressorBase):
@@ -566,7 +719,40 @@ class RegressorLogLinearKS(RegressorKS):
         super().__init__(xflow,
                          yflow,
                          func_x2y=loglinear_scatter,
-                         parser=parser_loglinear,
+                         parser=parser_anylinear,
+                         print_mean_std=print_mean_std_loglinear,
+                         gen_new_grid=gen_new_grid)
+
+    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+        gen_new_grid_kwargs = super()._set_gen_new_grid_kwargs(
+            gen_new_grid_kwargs)
+
+        if 'range_par' not in gen_new_grid_kwargs:
+            gen_new_grid_kwargs['range_par'] = [[-np.inf, np.inf],
+                                                [-np.inf, np.inf], [0, np.inf]]
+
+        return gen_new_grid_kwargs
+
+    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+        gen_new_grid_refine_kwargs = super()._set_gen_new_grid_refine_kwargs(
+            gen_new_grid_refine_kwargs)
+
+        if 'range_par' not in gen_new_grid_refine_kwargs:
+            gen_new_grid_refine_kwargs['range_par'] = [[-np.inf, np.inf],
+                                                       [-np.inf, np.inf],
+                                                       [0, np.inf]]
+
+        return gen_new_grid_refine_kwargs
+
+
+class RegressorLinearKS(RegressorKS):
+
+    def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
+
+        super().__init__(xflow,
+                         yflow,
+                         func_x2y=linear_scatter,
+                         parser=parser_anylinear,
                          print_mean_std=print_mean_std_loglinear,
                          gen_new_grid=gen_new_grid)
 
