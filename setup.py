@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="garden",
-    version="0.3.0",
+    version="0.4.0",
     author="Tao Jing",
     author_email="jingt20@mails.tsinghua.edu.cn",
     description=
