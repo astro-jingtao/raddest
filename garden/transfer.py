@@ -189,6 +189,27 @@ neglogplus_xshift = Transfer(trans_neglogplus_xshift,
                              trans_neglogplus_xshift_inv,
                              trans_neglogplus_xshift_jac, 3)
 
+# -- cdf --
+# u = cdf(x), v = cdf(x_err)
+
+
+# @jit
+# def trans_cdf(x, x_err, params):
+#     n_node_x = params[-2]
+#     n_node_x_err = params[-1]
+#     coef_x = params[:n_node_x * 3].reshape(3, -1)
+#     node_x = params[n_node_x * 3:n_node_x * 4]
+#     coef_x_err = params[n_node_x * 4:n_node_x * 4 + n_node_x_err * 3].reshape(
+#         3, -1)
+#     node_x_err = params[n_node_x * 4 + n_node_x_err * 3:n_node_x * 4 +
+#                         n_node_x_err * 4]
+
+#     PPoly(coef_x, node_x)(x)
+
+#     x_err_trans = neg_log_plus(x_err / x_err_median)
+#     return x_trans, x_err_trans
+
+
 all_trans_func = [
     'neglogplus', 'log_rotation', 'xshift_neglogplus', 'neglogplus_xshift'
 ]

@@ -1,5 +1,17 @@
 # Change Log
 
+## [unreleased]
+
+### Added
+
+- The scratch of quantile transformation
+
+## 0.4.0 - 2024-11-05
+
+### Changed
+
+- Rename the package to `garden`
+
 ## 0.3.0 - 2024-11-01
 
 ### Added
@@ -14,7 +26,7 @@
 
 ### Added
 
-- Recommend to use `python==3.9`, the development version of `rarden`.
+- Recommend to use `python==3.9`, the development version of `garden`.
 - Add gitee mirror for `ndtest`.
 - Require `python>=3.9`, due to the requirement of `optax` 
   - https://github.com/google-deepmind/optax/issues/711
