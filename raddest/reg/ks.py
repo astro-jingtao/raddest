@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 from ndtest.ksnd import ks2d2s
 
-from ..transfer import Transfer, neglogplus
+from ..transfer import Transfer, NegLogPlus
 from ..x_xerr import gen_xobs_trans
 from .constructor import construct_generator_cond
 
@@ -150,9 +150,9 @@ def gen_xy_obs_loglinear_neglogplus(flowx,
                                 b,
                                 sig,
                                 n=n,
-                                x_transfer=neglogplus,
+                                x_transfer=NegLogPlus(),
                                 x_transfer_params=x_transfer_params,
-                                y_transfer=neglogplus,
+                                y_transfer=NegLogPlus(),
                                 y_transfer_params=y_transfer_params,
                                 return_numpy=return_numpy)
 

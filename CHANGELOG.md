@@ -6,6 +6,10 @@
 
 - The scratch of quantile transformation
 
+### Changed
+
+- Refactor `raddest.transfer`, e.g. `log_rotation` → `LogRotation`
+
 ## 0.4.1 - 2024-11-06
 
 ### Changed

@@ -1,69 +1,78 @@
-import joblib
-
 import jax.numpy as jnp
+import joblib
 from jax import jit
+
 from .tools import neg_log_plus, neg_log_plus_inv
 
 
 class Transfer:
 
     def __init__(self, trans, inv, jac, n_params, params_estimator=None):
-        self.trans = trans
-        self.inv = inv
-        self.jac = jac
+        self.dumpable_core = {
+            'trans': trans,
+            'inv': inv,
+            'jac': jac,
+            'n_params': n_params,
+            'params_estimator': params_estimator
+        }
+        self.trans = jit(trans)
+        self.inv = jit(inv)
+        self.jac = jit(jac)
         self.n_params = n_params
-        self.params_estimator = params_estimator
+        self.params_estimator = jit(params_estimator)
 
     @classmethod
-    def load(cls, path, name_func_mapper=None):
-        if name_func_mapper is None:
-            name_func_mapper = NAME_FUNC_MAPPER
-        load_dict = joblib.load(path)
-        cls_par = {
-            k: NAME_FUNC_MAPPER[load_dict[k]]
-            for k in ['trans', 'inv', 'jac', 'params_estimator']
-        }
-        cls_par['n_params'] = load_dict['n_params']
-        return cls(**cls_par)
+    def load(cls, path):
+        return cls(**joblib.load(path))
 
     def save(self, path):
-        save_dict = {
-            'trans':
-            self.trans.__name__,
-            'inv':
-            self.inv.__name__,
-            'jac':
-            self.jac.__name__,
-            'n_params':
-            self.n_params,
-            'params_estimator':
-            self.params_estimator.__name__
-            if self.params_estimator is not None else None
-        }
-        joblib.dump(save_dict, path)
+        joblib.dump(self.dumpable_core, path)
+
+
+def NegLogPlus():
+    return Transfer(_trans_neglogplus, _trans_neglogplus_inv,
+                    _trans_neglogplus_jac, 2, _trans_neglogplus_estimator)
+
+
+def LogRotation():
+    return Transfer(_trans_log_rotation, _trans_log_rotation_inv,
+                    _trans_log_rotation_jac, 1)
+
+
+def XShiftNegLogPlus():
+    return Transfer(_trans_xshift_neglogplus, _trans_xshift_neglogplus_inv,
+                    _trans_xshift_neglogplus_jac, 3)
+
+
+def NegLogPlusXShift():
+    return Transfer(_trans_neglogplus_xshift, _trans_neglogplus_xshift_inv,
+                    _trans_neglogplus_xshift_jac, 3)
 
 
 # -- neglogplus --
 
 
-@jit
-def trans_neglogplus(x, x_err, params):
+def _trans_neglogplus(x, x_err, params):
     x_median, x_err_median = params
     x_trans = neg_log_plus(x / x_median)
     x_err_trans = neg_log_plus(x_err / x_err_median)
     return x_trans, x_err_trans
 
 
-@jit
-def trans_neglogplus_inv(x_trans, x_err_trans, params):
+trans_neglogplus = jit(_trans_neglogplus)
+
+
+def _trans_neglogplus_inv(x_trans, x_err_trans, params):
     x_median, x_err_median = params
     x = neg_log_plus_inv(x_trans) * x_median
     x_err = neg_log_plus_inv(x_err_trans) * x_err_median
     return x, x_err
 
 
-@jit
-def trans_neglogplus_jac(x, x_err, params):
+trans_neglogplus_inv = jit(_trans_neglogplus_inv)
+
+
+def _trans_neglogplus_jac(x, x_err, params):
     x_median, x_err_median = params
     k_x = jnp.where(x / x_median > 0, 1 / (x + x_median), 1 / x_median)
     k_x_err = jnp.where(x_err / x_err_median > 0, 1 / (x_err + x_err_median),
@@ -71,18 +80,16 @@ def trans_neglogplus_jac(x, x_err, params):
     return k_x * k_x_err
 
 
-@jit
-def trans_neglogplus_estimator(x, x_err):
+trans_neglogplus_jac = jit(_trans_neglogplus_jac)
+
+
+def _trans_neglogplus_estimator(x, x_err):
     x_median = jnp.median(x)
     x_err_median = jnp.median(x_err)
     return x_median, x_err_median
 
 
-neglogplus = Transfer(trans_neglogplus,
-                      trans_neglogplus_inv,
-                      trans_neglogplus_jac,
-                      2,
-                      params_estimator=trans_neglogplus_estimator)
+trans_neglogplus_estimator = jit(_trans_neglogplus_estimator)
 
 # -- log_rotation --
 
@@ -90,8 +97,7 @@ neglogplus = Transfer(trans_neglogplus,
 # v = sin * log(x) + cos * log(x_err)
 
 
-@jit
-def trans_log_rotation(x, x_err, params):
+def _trans_log_rotation(x, x_err, params):
     theta = params
     cos = jnp.cos(theta)
     sin = jnp.sin(theta)
@@ -102,8 +108,10 @@ def trans_log_rotation(x, x_err, params):
     return u, v
 
 
-@jit
-def trans_log_rotation_inv(u, v, params):
+trans_log_rotation = jit(_trans_log_rotation)
+
+
+def _trans_log_rotation_inv(u, v, params):
     theta = params
     cos = jnp.cos(theta)
     sin = jnp.sin(theta)
@@ -112,37 +120,41 @@ def trans_log_rotation_inv(u, v, params):
     return x, x_err
 
 
-@jit
-def trans_log_rotation_jac(x, x_err, params):
+trans_log_rotation_inv = jit(_trans_log_rotation_inv)
+
+
+def _trans_log_rotation_jac(x, x_err, params):
     return 1 / (x * x_err)
 
 
-log_rotation = Transfer(trans_log_rotation, trans_log_rotation_inv,
-                        trans_log_rotation_jac, 1)
+trans_log_rotation_jac = jit(_trans_log_rotation_jac)
 
 # -- xshift_neglogplus --
 
 # log((x + shift)/x_median + 1)
 
 
-@jit
-def trans_xshift_neglogplus(x, x_err, params):
+def _trans_xshift_neglogplus(x, x_err, params):
     x_median, x_err_median, x_shift = params
     x_trans = neg_log_plus((x + x_shift) / x_median)
     x_err_trans = neg_log_plus(x_err / x_err_median)
     return x_trans, x_err_trans
 
 
-@jit
-def trans_xshift_neglogplus_inv(x_trans, x_err_trans, params):
+trans_xshift_neglogplus = jit(_trans_xshift_neglogplus)
+
+
+def _trans_xshift_neglogplus_inv(x_trans, x_err_trans, params):
     x_median, x_err_median, x_shift = params
     x = neg_log_plus_inv(x_trans) * x_median - x_shift
     x_err = neg_log_plus_inv(x_err_trans) * x_err_median
     return x, x_err
 
 
-@jit
-def trans_xshift_neglogplus_jac(x, x_err, params):
+trans_xshift_neglogplus_inv = jit(_trans_xshift_neglogplus_inv)
+
+
+def _trans_xshift_neglogplus_jac(x, x_err, params):
     x_median, x_err_median, x_shift = params
     k_x = jnp.where((x + x_shift) / x_median > 0, 1 / (x + x_shift + x_median),
                     1 / x_median)
@@ -151,33 +163,34 @@ def trans_xshift_neglogplus_jac(x, x_err, params):
     return k_x * k_x_err
 
 
-xshift_neglogplus = Transfer(trans_xshift_neglogplus,
-                             trans_xshift_neglogplus_inv,
-                             trans_xshift_neglogplus_jac, 3)
+trans_xshift_neglogplus_jac = jit(_trans_xshift_neglogplus_jac)
 
 # -- neglogplus_xshift --
 
 # log(x/x_median + 1) + shift
 
 
-@jit
-def trans_neglogplus_xshift(x, x_err, params):
+def _trans_neglogplus_xshift(x, x_err, params):
     x_median, x_err_median, x_shift = params
     x_trans = neg_log_plus(x / x_median) + x_shift
     x_err_trans = neg_log_plus(x_err / x_err_median)
     return x_trans, x_err_trans
 
 
-@jit
-def trans_neglogplus_xshift_inv(x_trans, x_err_trans, params):
+trans_neglogplus_xshift = jit(_trans_neglogplus_xshift)
+
+
+def _trans_neglogplus_xshift_inv(x_trans, x_err_trans, params):
     x_median, x_err_median, x_shift = params
     x = neg_log_plus_inv(x_trans - x_shift) * x_median
     x_err = neg_log_plus_inv(x_err_trans) * x_err_median
     return x, x_err
 
 
-@jit
-def trans_neglogplus_xshift_jac(x, x_err, params):
+trans_neglogplus_xshift_inv = jit(_trans_neglogplus_xshift_inv)
+
+
+def _trans_neglogplus_xshift_jac(x, x_err, params):
     x_median, x_err_median, x_shift = params
     k_x = jnp.where(x / x_median > 0, 1 / (x + x_median), 1 / x_median)
     k_x_err = jnp.where(x_err / x_err_median > 0, 1 / (x_err + x_err_median),
@@ -185,13 +198,10 @@ def trans_neglogplus_xshift_jac(x, x_err, params):
     return k_x * k_x_err
 
 
-neglogplus_xshift = Transfer(trans_neglogplus_xshift,
-                             trans_neglogplus_xshift_inv,
-                             trans_neglogplus_xshift_jac, 3)
+trans_neglogplus_xshift_jac = jit(_trans_neglogplus_xshift_jac)
 
 # -- cdf --
 # u = cdf(x), v = cdf(x_err)
-
 
 # @jit
 # def trans_cdf(x, x_err, params):
@@ -208,7 +218,6 @@ neglogplus_xshift = Transfer(trans_neglogplus_xshift,
 
 #     x_err_trans = neg_log_plus(x_err / x_err_median)
 #     return x_trans, x_err_trans
-
 
 all_trans_func = [
     'neglogplus', 'log_rotation', 'xshift_neglogplus', 'neglogplus_xshift'

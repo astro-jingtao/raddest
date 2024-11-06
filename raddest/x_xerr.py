@@ -11,8 +11,8 @@ from jax.scipy.special import logsumexp
 from pzflow import Flow
 
 from .tools import get_ext_w, get_ext_w_qmc, shrink_gg
-from .transfer import (Transfer, log_rotation, neglogplus, neglogplus_xshift,
-                       xshift_neglogplus)
+from .transfer import (LogRotation, NegLogPlus, NegLogPlusXShift, Transfer,
+                       XShiftNegLogPlus)
 
 
 def nf_fit_frame(u_ext,
@@ -212,7 +212,7 @@ def nf_fit_trans_neglogplus(x_obs, x_err, **kwargs):
 
     return nf_fit_general(x_obs,
                           x_err,
-                          transfer=neglogplus,
+                          transfer=NegLogPlus(),
                           transfer_params=transfer_params,
                           **kwargs)
 
@@ -223,7 +223,7 @@ def nf_fit_trans_log_rotation(x_obs, x_err, *, theta, **kwargs):
 
     return nf_fit_general(x_obs,
                           x_err,
-                          transfer=log_rotation,
+                          transfer=LogRotation(),
                           transfer_params=transfer_params,
                           **kwargs)
 
@@ -347,7 +347,7 @@ def gen_xobs_trans_log_rotation(flow,
                           x_max,
                           x_err_min,
                           x_err_max,
-                          transfer=log_rotation,
+                          transfer=LogRotation(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
@@ -370,7 +370,7 @@ def gen_xobs_trans_neglogplus(flow,
                           x_max,
                           x_err_min,
                           x_err_max,
-                          transfer=neglogplus,
+                          transfer=NegLogPlus(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
@@ -383,7 +383,7 @@ def gen_xobs_trans_neglogplus_xshift(flow,
                                      x_err_max,
                                      transfer_params,
                                      return_numpy=False):
-    # neglogplus_xshift
+    # NegLogPlusXShift
     # log(x/x_median + 1) + shift
     return gen_xobs_trans(flow,
                           N,
@@ -391,7 +391,7 @@ def gen_xobs_trans_neglogplus_xshift(flow,
                           x_max,
                           x_err_min,
                           x_err_max,
-                          transfer=neglogplus_xshift,
+                          transfer=NegLogPlusXShift(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
@@ -404,7 +404,7 @@ def gen_xobs_trans_xshift_neglogplus(flow,
                                      x_err_max,
                                      transfer_params,
                                      return_numpy=False):
-    # xshift_neglogplus
+    # XShiftNegLogPlus
     # log((x + shift)/x_median + 1)
     return gen_xobs_trans(flow,
                           N,
@@ -412,6 +412,6 @@ def gen_xobs_trans_xshift_neglogplus(flow,
                           x_max,
                           x_err_min,
                           x_err_max,
-                          transfer=xshift_neglogplus,
+                          transfer=XShiftNegLogPlus(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
