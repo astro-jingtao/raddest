@@ -6,6 +6,12 @@
 
 - The scratch of quantile transformation
 
+## 0.4.1 - 2024-11-06
+
+### Changed
+
+- Rename the package to `raddest`
+
 ## 0.4.0 - 2024-11-05
 
 ### Changed
@@ -26,7 +32,7 @@
 
 ### Added
 
-- Recommend to use `python==3.9`, the development version of `garden`.
+- Recommend to use `python==3.9`, the development version of `rarden`.
 - Add gitee mirror for `ndtest`.
 - Require `python>=3.9`, due to the requirement of `optax` 
   - https://github.com/google-deepmind/optax/issues/711
