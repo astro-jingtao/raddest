@@ -3,12 +3,23 @@
 ## [unreleased]
 
 ### Added
-
 - The scratch of quantile transformation
+
+## 0.5.0 - 2024-11-07
+
+### Added
+- Support force save for `FlowVI`
+- Make `Transfer` can be combined
+- `post_shift` method for `FlowVI`
 
 ### Changed
 
 - Refactor `raddest.transfer`, e.g. `log_rotation` → `LogRotation`
+- Set `N=10000` as default for `raddest.api.fitter.ks_test` 
+
+### Fixed
+
+- fix the bug when try to save `FlowVI` with `flow=None` 
 
 ## 0.4.1 - 2024-11-06
 

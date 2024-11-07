@@ -1,4 +1,5 @@
 import os
+import shutil
 from functools import partial
 from typing import Union
 
@@ -69,7 +70,12 @@ class FlowVI:
     @classmethod
     def load(cls, path):
         att = joblib.load(os.path.join(path, 'attribute'))
-        flow = Flow(file=os.path.join(path, 'flow'))
+        if att['flow']:
+            flow = Flow(file=os.path.join(path, 'flow'))
+            att['flow'] = flow
+        else:
+            flow = None
+
         if att['transfer']:
             transfer = Transfer.load(os.path.join(path, 'transfer'))
             att['transfer'] = transfer
@@ -77,7 +83,7 @@ class FlowVI:
             transfer = None
 
         is_fitted = att.pop('fitted')
-        new_cls = cls(flow=flow, **att)
+        new_cls = cls(**att)
         new_cls.fitted = is_fitted
 
         return new_cls
@@ -188,6 +194,9 @@ class FlowVI:
 
         self.check_fit()
 
+        x_obs = jnp.asarray(x_obs)
+        x_err = jnp.asarray(x_err)
+
         u_ext, v_ext, w = construct_x_xerr_w(
             x_obs,
             x_err,
@@ -205,7 +214,7 @@ class FlowVI:
     def ks_test(self,
                 x_obs,
                 x_err,
-                N,
+                N=10000,
                 x_min=None,
                 x_max=None,
                 x_err_min=None,
@@ -220,18 +229,24 @@ class FlowVI:
 
         return ks2d2s(x_obs, x_err, x_obs_gen, x_err_gen)
 
-    def save(self, folder):
+    def save(self, folder, force=False):
 
         if not os.path.exists(folder):
             os.makedirs(folder)
         else:
             if not os.path.isdir(folder):
-                raise ValueError(
-                    f"{folder} already exists, but is not a folder.")
+                if not force:
+                    raise RuntimeError(
+                        f"{folder} already exists, but is not a folder.")
+                os.remove(folder)
+                os.makedirs(folder)
             if len(os.listdir(folder)) > 0:
-                raise ValueError(
-                    f"Folder {folder} already exists, and is not empty.")
+                if not force:
+                    raise RuntimeError(
+                        f"Folder {folder} already exists, and is not empty.")
 
+                shutil.rmtree(folder)
+                os.makedirs(folder)
         # save all the attributes of the object (except the flow)
         save_dict = {
             'transfer_params': self.transfer_params,
@@ -248,10 +263,14 @@ class FlowVI:
             save_dict['transfer'] = True
             self.transfer.save(os.path.join(folder, 'transfer'))
 
-        joblib.dump(save_dict, os.path.join(folder, 'attribute'))
-
         # save the flow separately
-        self.flow.save(os.path.join(folder, 'flow'))
+        if self.flow is None:
+            save_dict['flow'] = None
+        else:
+            save_dict['flow'] = True
+            self.flow.save(os.path.join(folder, 'flow'))
+
+        joblib.dump(save_dict, os.path.join(folder, 'attribute'))
 
 
 class RegressorBase:
