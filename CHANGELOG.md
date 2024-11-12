@@ -2,8 +2,17 @@
 
 ## [unreleased]
 
+## 0.6.0 - 2024-11-12
+
 ### Added
 - The scratch of quantile transformation
+- Save loss when save `FlowVI`
+- Add `get_cov` for `RegressorML` to measure the covariance matrix by using the Hessian as a Gaussian approximation
+- Add `get_posterior_qmc` for `RegressorML` to generate the posterior by quasi monte carlo method
+
+### Changed
+
+- `RegressorML.fit` return best-fitted parameters, corresponding uncertainties, and covariance matrix.
 
 ## 0.5.0 - 2024-11-07
 

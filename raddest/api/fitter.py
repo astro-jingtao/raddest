@@ -11,6 +11,7 @@ from jax import jit, vmap
 from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from pzflow import Flow
+from scipy.stats import qmc
 
 from ..grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
                            get_weighted_res, grid_search, zoom_in_grid)
@@ -83,8 +84,11 @@ class FlowVI:
             transfer = None
 
         is_fitted = att.pop('fitted')
+        loss = att.pop(
+            'loss') if 'loss' in att else None  # for backward compatibility
         new_cls = cls(**att)
         new_cls.fitted = is_fitted
+        new_cls.loss = loss
 
         return new_cls
 
@@ -255,6 +259,7 @@ class FlowVI:
             'x_err_min': self.x_err_min,
             'x_err_max': self.x_err_max,
             'fitted': self.fitted,
+            'loss': self.loss
         }
 
         if self.transfer is None:
@@ -427,6 +432,36 @@ class RegressorML(RegressorBase):
 
         return x_ext, y_ext, w
 
+    def get_cov(self,
+                x_obs,
+                x_err,
+                y_obs,
+                y_err,
+                params,
+                n=21,
+                x_range=None,
+                x_err_range=None,
+                y_range=None,
+                y_err_range=None,
+                kde_batch_size=None):
+
+        x_ext, y_ext, w = self.get_ext_data(x_obs,
+                                            x_err,
+                                            y_obs,
+                                            y_err,
+                                            n=n,
+                                            x_range=x_range,
+                                            x_err_range=x_err_range,
+                                            y_range=y_range,
+                                            y_err_range=y_err_range,
+                                            kde_batch_size=kde_batch_size)
+
+        n_sample = x_obs.size
+        hessian = self._dd_log_likelihood_ext(params, x_ext, y_ext, w)
+        # we use the mean of the log-likelihood as the loss
+        # here we divide the number of samples to get the true covariance
+        return -jnp.linalg.inv(jnp.array(hessian)[0, :, 0, :]) / n_sample
+
     def log_likelihood(self,
                        x_obs,
                        x_err,
@@ -453,7 +488,7 @@ class RegressorML(RegressorBase):
 
         n_sample = x_obs.size
         # we use the mean of the log-likelihood as the loss
-        # here we multiply the number of samples to get the truu log-likelihood
+        # here we multiply the number of samples to get the true log-likelihood
 
         return self._v_log_likelihood_ext(self._get_v_params(params), x_ext,
                                           y_ext, w) * n_sample
@@ -514,15 +549,56 @@ class RegressorML(RegressorBase):
                                             y_err_range=y_err_range,
                                             kde_batch_size=kde_batch_size)
 
-        return self.trainer(params_0,
-                            x_ext,
-                            y_ext,
-                            w,
-                            lr=lr,
-                            n_step=n_step,
-                            atol=atol,
-                            rtol=rtol,
-                            verbose=verbose)
+        params_ml = self.trainer(params_0,
+                                 x_ext,
+                                 y_ext,
+                                 w,
+                                 lr=lr,
+                                 n_step=n_step,
+                                 atol=atol,
+                                 rtol=rtol,
+                                 verbose=verbose)
+
+        cov = self.get_cov(x_obs,
+                           x_err,
+                           y_obs,
+                           y_err,
+                           params_ml,
+                           n=n,
+                           x_range=x_range,
+                           x_err_range=x_err_range,
+                           y_range=y_range,
+                           y_err_range=y_err_range,
+                           kde_batch_size=kde_batch_size)
+
+        params_std = jnp.sqrt(jnp.diag(cov))
+
+        return params_ml, params_std, cov
+
+    def get_posterior_qmc(self,
+                          x_obs,
+                          x_err,
+                          y_obs,
+                          y_err,
+                          l_bounds,
+                          u_bounds,
+                          m=15):
+
+        if len(l_bounds) != len(u_bounds):
+            raise ValueError(
+                "l_bounds and u_bounds should have the same length.")
+
+        d = len(l_bounds)
+        sampler = qmc.Sobol(d=d, scramble=True)
+
+        params_grid = qmc.scale(sampler.random_base2(m=m), l_bounds, u_bounds)
+
+        log_posterior = self.log_posterior(x_obs, x_err, y_obs, y_err,
+                                           params_grid)
+        
+        weight = jnp.exp(log_posterior - log_posterior.max())
+
+        return params_grid, weight
 
     def _get_v_params(self, params):
         params = jnp.asarray(params)

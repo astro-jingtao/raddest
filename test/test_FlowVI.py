@@ -11,7 +11,7 @@ from raddest.api.fitter import FlowVI
 from raddest.transfer import NegLogPlus
 
 
-class TestFlowVI:
+class TestFlowVISaveLoad:
 
     def test_base_case(self):
 
