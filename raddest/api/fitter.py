@@ -275,15 +275,16 @@ class FlowVI:
 
         for _ in range(K):
 
-            x_gen, x_err_gen, x_obs_gen = self.sample(N,
-                                                      x_min=x_min,
-                                                      x_max=x_max,
-                                                      x_err_min=x_err_min,
-                                                      x_err_max=x_err_max,
-                                                      return_numpy=True)
+            _, x_err_gen, x_obs_gen = self.sample(N,
+                                                  x_min=x_min,
+                                                  x_max=x_max,
+                                                  x_err_min=x_err_min,
+                                                  x_err_max=x_err_max,
+                                                  return_numpy=True)
 
             selected = np.random.choice(N_data, M, replace=False)
-            D, p = ks2d2s(x_obs[selected], x_err[selected], x_obs_gen, x_err_gen)
+            D, p = ks2d2s(x_obs[selected], x_err[selected], x_obs_gen,
+                          x_err_gen)
 
             D_lst.append(D)
             p_lst.append(p)
@@ -373,18 +374,21 @@ class RegressorBase:
         else:
             self.generator_cond = None
 
+    def _check_generator_cond(self):
+        if self.generator_cond is None:
+            raise ValueError(
+                "No conditional generator is not set. Please set it use `self.set_generator_cond()` first."
+            )
+
     def sample(self,
                params,
-               N=1000,
+               N=10000,
                x_range=None,
                x_err_range=None,
                y_range=None,
                y_err_range=None):
 
-        if self.generator_cond is None:
-            raise ValueError(
-                "No conditional generator is not set. Please set it use `self.set_generator_cond()` first."
-            )
+        self._check_generator_cond()
 
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
@@ -411,6 +415,88 @@ class RegressorBase:
                                                           y_max=y_range[-1])
 
         return x_obs_gen, y_obs_gen, x_err_gen, y_err_gen, x_gen, y_gen
+
+    def ks_test(self,
+                params,
+                x_obs,
+                y_obs,
+                N=10000,
+                M=None,
+                K=1,
+                x_range=None,
+                x_err_range=None,
+                y_range=None,
+                y_err_range=None):
+        """
+        Perform 2D-KS test.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters used for the data generator.
+        x_obs : array_like
+            Observed x values.
+        y_obs : array_like
+            Observed y values.
+        N : int, optional
+            Number of points to generate for the test. Default is 10000.
+        M : int, optional
+            Number of data points to select for the test. If None, M is set to the number of x_obs. Default is None.
+        K : int, optional
+            Number of iterations for the test. Default is 1.
+        x_range : tuple of (float, float), optional
+            Range (min, max) for generating x values. Default is None.
+        x_err_range : tuple of (float, float), optional
+            Range (min, max) for generating x errors. Default is None.
+        y_range : tuple of (float, float), optional
+            Range (min, max) for generating y values. Default is None.
+        y_err_range : tuple of (float, float), optional
+            Range (min, max) for generating y errors. Default is None.
+
+        Returns
+        --------
+        D or D_lst : float or list of float
+            Single D value if K=1, otherwise list of D values.
+        p or p_lst : float or list of float
+            Single p value if K=1, otherwise list of p values.
+        Notes
+        ------
+        If M is larger than the number of data points, M is set to the number of data points, and a warning is issued.
+        """
+
+        self._check_generator_cond()
+
+        N_data = x_obs.size
+
+        if M is None:
+            M = N_data
+
+        if M > N_data:
+            print(
+                "Warning: M is larger than the number of data points, M is set to the number of data points."
+            )
+            M = N_data
+
+        D_lst, p_lst = [], []
+
+        for _ in range(K):
+
+            x_obs_gen, y_obs_gen, _, _, _, _ = self.sample(
+                params,
+                N=N,
+                x_range=x_range,
+                x_err_range=x_err_range,
+                y_range=y_range,
+                y_err_range=y_err_range)
+
+            selected = np.random.choice(N_data, M, replace=False)
+            D, p = ks2d2s(x_obs[selected], y_obs[selected], x_obs_gen,
+                          y_obs_gen)
+
+            D_lst.append(D)
+            p_lst.append(p)
+
+        return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
 
 
 # TODO: cache x_ext, y_ext, w ?

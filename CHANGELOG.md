@@ -4,7 +4,12 @@
 
 ### Added
 
-- `FlowVI.ks_test` support for test `K` times and use `M` observed data points in each test.
+- Now `FlowVI.ks_test` support for test `K` times and use `M` observed data points in each test.
+- Add `RegressorBase.ks_test`
+
+## Changed
+
+- `RegressorBase.sample` default `N=1000` to `N=10000`.
 
 ## 0.6.0 - 2024-11-12
 
