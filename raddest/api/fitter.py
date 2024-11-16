@@ -219,19 +219,76 @@ class FlowVI:
                 x_obs,
                 x_err,
                 N=10000,
+                M=None,
+                K=1,
                 x_min=None,
                 x_max=None,
                 x_err_min=None,
                 x_err_max=None):
+        """
+        Perform 2D-KS test.
 
-        x_gen, x_err_gen, x_obs_gen = self.sample(N,
-                                                  x_min=x_min,
-                                                  x_max=x_max,
-                                                  x_err_min=x_err_min,
-                                                  x_err_max=x_err_max,
-                                                  return_numpy=True)
+        Parameters
+        -----------
+        x_obs : array_like
+            Observed x values.
+        x_err : array_like
+            Observed x errors.
+        N : int, optional
+            Number of points to generate for the test. Default is 10000.
+        M : int, optional
+            Number of data points to select for the test. If None, M is set to the number of x_obs. Default is None.
+        K : int, optional
+            Number of iterations for the test. Default is 1.
+        x_min : float, optional
+            Minimum x value for the generated data. Default is None.
+        x_max : float, optional
+            Maximum x value for the generated data. Default is None.
+        x_err_min : float, optional
+            Minimum x error value for the generated data. Default is None.
+        x_err_max : float, optional
+            Maximum x error value for the generated data. Default is None.
 
-        return ks2d2s(x_obs, x_err, x_obs_gen, x_err_gen)
+        Returns
+        --------
+        D or D_lst : float or list of float
+            Single D value if K=1, otherwise list of D values.
+        p or p_lst : float or list of float
+            Single p value if K=1, otherwise list of p values.
+        Notes
+        ------
+        If M is larger than the number of data points, M is set to the number of data points, and a warning is issued.
+        """
+
+        N_data = x_obs.size
+
+        if M is None:
+            M = N_data
+
+        if M > N_data:
+            print(
+                "Warning: M is larger than the number of data points, M is set to the number of data points."
+            )
+            M = N_data
+
+        D_lst, p_lst = [], []
+
+        for _ in range(K):
+
+            x_gen, x_err_gen, x_obs_gen = self.sample(N,
+                                                      x_min=x_min,
+                                                      x_max=x_max,
+                                                      x_err_min=x_err_min,
+                                                      x_err_max=x_err_max,
+                                                      return_numpy=True)
+
+            selected = np.random.choice(N_data, M, replace=False)
+            D, p = ks2d2s(x_obs[selected], x_err[selected], x_obs_gen, x_err_gen)
+
+            D_lst.append(D)
+            p_lst.append(p)
+
+        return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
 
     def save(self, folder, force=False):
 
@@ -595,7 +652,7 @@ class RegressorML(RegressorBase):
 
         log_posterior = self.log_posterior(x_obs, x_err, y_obs, y_err,
                                            params_grid)
-        
+
         weight = jnp.exp(log_posterior - log_posterior.max())
 
         return params_grid, weight

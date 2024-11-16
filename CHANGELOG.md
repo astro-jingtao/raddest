@@ -2,6 +2,10 @@
 
 ## [unreleased]
 
+### Added
+
+- `FlowVI.ks_test` support for test `K` times and use `M` observed data points in each test.
+
 ## 0.6.0 - 2024-11-12
 
 ### Added
