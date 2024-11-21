@@ -1,11 +1,10 @@
 from typing import Union
 
-
 import jax.numpy as jnp
 import numpy as np
 from jax.scipy.stats import gaussian_kde
 
-from ..tools import get_ext_w_2d, get_p_flow
+from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_p_flow
 from ..transfer import Transfer
 
 
@@ -19,6 +18,9 @@ def get_xyw_trans(x_obs,
                   x_err_range,
                   y_range,
                   y_err_range,
+                  use_qmc=False,
+                  ignore_y_err_c_y=False,
+                  flow_batch_size=None,
                   kde_batch_size=None,
                   get_w_add=None,
                   x_transfer: Union[Transfer, None] = None,
@@ -33,9 +35,12 @@ def get_xyw_trans(x_obs,
     '''
 
     # x, x_err | y, y_err <-> u, v
-
-    _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d(
-        x_obs, y_obs, x_err, y_err, n)
+    if use_qmc:
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_qmc(
+            x_obs, y_obs, x_err, y_err, n)
+    else:
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d(
+            x_obs, y_obs, x_err, y_err, n)
 
     if x_transfer is None:
         ux_ext = _x_ext
@@ -69,13 +74,17 @@ def get_xyw_trans(x_obs,
     if x_transfer is None:
         px_xerr = jnp.where(
             is_in_range,
-            get_p_flow(flowx, ux_ext.flatten(),
-                       vx_ext.flatten()).reshape(s1, s2), 0)
+            get_p_flow(flowx,
+                       ux_ext.flatten(),
+                       vx_ext.flatten(),
+                       batch_size=flow_batch_size).reshape(s1, s2), 0)
     else:
         px_xerr = jnp.where(
             is_in_range,
-            get_p_flow(flowx, ux_ext.flatten(), vx_ext.flatten()).reshape(
-                s1, s2) *
+            get_p_flow(flowx,
+                       ux_ext.flatten(),
+                       vx_ext.flatten(),
+                       batch_size=flow_batch_size).reshape(s1, s2) *
             x_transfer.jac(_x_ext, _x_err_ext, params=x_transfer_params), 0)
 
     # wy: w2
@@ -89,27 +98,44 @@ def get_xyw_trans(x_obs,
         y_sample, y_err_sample = y_transfer.inv(uy_sample,
                                                 vy_sample,
                                                 params=y_transfer_params)
-    kernel_y = gaussian_kde(y_sample)
 
-    if kde_batch_size is None:
-        py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
+    if ignore_y_err_c_y:
+        wy = jnp.ones_like(uy_ext)
     else:
-        py = kde_pdf_batch(kernel_y,
-                           _y_ext.flatten(),
-                           batch_size=kde_batch_size).reshape(s1, s2)
 
-    if y_transfer is None:
-        py_yerr = get_p_flow(flowy, uy_ext.flatten(),
-                             vy_ext.flatten()).reshape(s1, s2)
-    else:
-        py_yerr = get_p_flow(
-            flowy, uy_ext.flatten(), vy_ext.flatten()).reshape(
-                s1, s2) * y_transfer.jac(
+        kernel_y = gaussian_kde(y_sample)
+
+        if kde_batch_size is None:
+            py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
+        else:
+            py = kde_pdf_batch(kernel_y,
+                               _y_ext.flatten(),
+                               batch_size=kde_batch_size).reshape(s1, s2)
+
+        # hist based
+        # py_bin, edges = jnp.histogram(y_sample,
+        #                       bins=50,
+        #                       density=True,
+        #                       range=(y_min, y_max))
+        # center = (edges[:-1] + edges[1:]) / 2
+        # py = jnp.interp(_y_ext.flatten(), center, py_bin).reshape(s1, s2)
+
+        if y_transfer is None:
+            py_yerr = get_p_flow(flowy,
+                                 uy_ext.flatten(),
+                                 vy_ext.flatten(),
+                                 batch_size=flow_batch_size).reshape(s1, s2)
+        else:
+            py_yerr = get_p_flow(
+                flowy,
+                uy_ext.flatten(),
+                vy_ext.flatten(),
+                batch_size=flow_batch_size).reshape(s1, s2) * y_transfer.jac(
                     _y_ext, _y_err_ext, params=y_transfer_params)
 
-    eps = 1e-10
-    wy = jnp.where(is_in_range, py_yerr / (py + eps), 0)
-    wy = jnp.nan_to_num(wy, nan=0)
+        eps = 1e-10
+        wy = jnp.where(is_in_range, py_yerr / (py + eps), 0)
+        wy = jnp.nan_to_num(wy, nan=0)
 
     if get_w_add is None:
         w_add = 1

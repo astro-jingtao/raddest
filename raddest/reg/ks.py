@@ -2,6 +2,7 @@ from typing import Union
 
 import numpy as np
 from ndtest.ksnd import ks2d2s
+from scipy.stats import t as student_t
 
 from ..transfer import Transfer, NegLogPlus
 from ..x_xerr import gen_xobs_trans
@@ -61,13 +62,27 @@ def loglinear_scatter(x, params):
         10,
         k * np.log10(x) + b + np.random.normal(scale=sig, size=x.shape))
 
+
 loglinear_generator_cond = construct_generator_cond(loglinear_scatter)
+
 
 def linear_scatter(x, params):
     k, b, sig = params
     return k * x + b + np.random.normal(scale=sig, size=x.shape)
 
+
 linear_generator_cond = construct_generator_cond(linear_scatter)
+
+
+def loglinear_scatter_student_t(x, params):
+    k, b, df, sig = params
+    return np.power(
+        10,
+        k * np.log10(x) + b + student_t.rvs(df, scale=sig, size=x.shape))
+
+
+loglinear_generator_cond_student_t = construct_generator_cond(
+    loglinear_scatter_student_t)
 
 
 def loglinear_x2y(x, x_obs, y_kdt, y_err_kdt, k, b, sig, return_more=False):

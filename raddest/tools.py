@@ -83,10 +83,69 @@ def get_ext_w_2d(x_obs, y_obs, x_err, y_err, n):
     return x_ext, y_ext, x_err_ext, y_err_ext, ghq.W
 
 
-def get_p_flow(flow, x, x_err):
-    log_p = flow._log_prob(flow._params, jnp.c_[x, x_err],
-                           jnp.zeros(shape=(x.shape[0], 1)))
-    return jnp.exp(log_p)
+def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
+
+    if not is_2power(n):
+        print(f"n={n} is not a power of 2, rounding to {round_to_2power(n)}")
+        n = round_to_2power(n)
+
+    X = MultivariateNormalQMC(mean=[
+        0,
+        0,
+    ], cov=[[
+        1,
+        0,
+    ], [
+        0,
+        1,
+    ]]).random(n).T
+
+    x_ext = X[0] * x_err.reshape(-1, 1) + x_obs.reshape(-1, 1)
+    y_ext = X[1] * y_err.reshape(-1, 1) + y_obs.reshape(-1, 1)
+    x_err_ext = get_x_err_ext(x_err, n)
+    y_err_ext = get_x_err_ext(y_err, n)
+    w = jnp.ones(n)
+    return x_ext, y_ext, x_err_ext, y_err_ext, w
+
+
+def get_p_flow(flow, x, x_err, batch_size=None):
+    """
+    Calculate probabilities in batches to avoid OOM errors.
+
+    Parameters:
+    - flow: The flow model.
+    - x: Array of x values.
+    - x_err: Array of x error values.
+    - batch_size: Number of samples to process in each batch. If None, process all at once.
+
+    Returns:
+    - Array of probabilities.
+    """
+
+    if batch_size is None:
+        # If n_batch is None, process the entire array
+        concat_input = jnp.c_[x, x_err]  # Use jnp.c_ for concatenation
+        log_p = flow._log_prob(flow._params, concat_input,
+                               jnp.zeros(shape=(concat_input.shape[0], 1)))
+        return jnp.exp(log_p)
+
+    # If n_batch is specified, process in chunks
+    n_samples = x.shape[0]
+    probabilities = []
+
+    for i in range(0, n_samples, batch_size):
+        end_index = min(i + batch_size, n_samples)
+        x_batch = x[i:end_index]
+        x_err_batch = x_err[i:end_index]
+
+        concat_input = jnp.c_[x_batch,
+                              x_err_batch]  # Use jnp.c_ for concatenation
+        log_p_batch = flow._log_prob(
+            flow._params, concat_input,
+            jnp.zeros(shape=(concat_input.shape[0], 1)))
+        probabilities.append(jnp.exp(log_p_batch))
+
+    return jnp.concatenate(probabilities)
 
 
 # ----

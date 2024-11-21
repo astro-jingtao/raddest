@@ -2,14 +2,21 @@
 
 ## [unreleased]
 
+## 0.7.0 - 2024-11-21
+
 ### Added
 
 - Now `FlowVI.ks_test` support for test `K` times and use `M` observed data points in each test.
-- Add `RegressorBase.ks_test`
+- Add `RegressorBase.ks_test`.
+- Add `RegressorLogLinearStudentTML` that use Student's t distribution to model intrinsic scatter.
+- `get_xyw_trans` support 
+  - `use_qmc`: use QMC to calculate integral.
+  - `ignore_y_err_c_y`: if True, calculate `P(x_obs, y_obs, x_err|theta, y_err)` but not `P(x_obs, y_obs, x_err, y_err|theta)`.
 
 ## Changed
 
 - `RegressorBase.sample` default `N=1000` to `N=10000`.
+- `get_p_flow` support calculate in batch to avoid OOM.
 
 ## 0.6.0 - 2024-11-12
 
