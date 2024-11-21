@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.stats import gaussian_kde
 
-from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_p_flow
+from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_p_flow, concat
 from ..transfer import Transfer
 
 
@@ -18,7 +18,7 @@ def get_xyw_trans(x_obs,
                   x_err_range,
                   y_range,
                   y_err_range,
-                  use_qmc=False,
+                  int_method='ghq',
                   ignore_y_err_c_y=False,
                   flow_batch_size=None,
                   kde_batch_size=None,
@@ -35,12 +35,57 @@ def get_xyw_trans(x_obs,
     '''
 
     # x, x_err | y, y_err <-> u, v
-    if use_qmc:
-        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_qmc(
-            x_obs, y_obs, x_err, y_err, n)
-    else:
+
+    if int_method == 'auto':
+        x_err_ratio = 2 * jnp.median(x_err) / (jnp.percentile(x_obs, 84) -
+                                               jnp.percentile(x_obs, 16))
+        y_err_ratio = 2 * jnp.median(y_err) / (jnp.percentile(y_obs, 84) -
+                                               jnp.percentile(y_obs, 16))
+        if (x_err_ratio > 0.5) or (y_err_ratio > 0.5):
+            int_method = 'qgrid'
+            # print(int_method)
+        else:
+            int_method = 'ghq'
+            # print(int_method)
+
+    if int_method == 'ghq':
         _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d(
             x_obs, y_obs, x_err, y_err, n)
+    elif int_method == 'qmc':
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_qmc(
+            x_obs, y_obs, x_err, y_err, n)
+    elif int_method == 'grid':
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_grid(
+            x_obs, y_obs, x_err, y_err, n)
+    elif int_method == 'qgrid':
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_qgrid(
+            x_obs, y_obs, x_err, y_err, n)
+    elif int_method == 'ghq+qgrid':
+        x_err_ratio = 2 * x_err / (jnp.percentile(x_obs, 84) -
+                                   jnp.percentile(x_obs, 16))
+        y_err_ratio = 2 * y_err / (jnp.percentile(y_obs, 84) -
+                                   jnp.percentile(y_obs, 16))
+        to_use_qgrid = (x_err_ratio > 0.5) | (y_err_ratio > 0.5)
+
+        print(to_use_qgrid.sum())
+
+        _x_ext_ghq, _y_ext_ghq, _x_err_ext_ghq, _y_err_ext_ghq, _w_ghq = get_ext_w_2d(
+            x_obs[~to_use_qgrid], y_obs[~to_use_qgrid], x_err[~to_use_qgrid],
+            y_err[~to_use_qgrid], n)
+        _w_ghq = jnp.repeat(_w_ghq[None, :], (~to_use_qgrid).sum(), axis=0)
+
+        _x_ext_qgrid, _y_ext_qgrid, _x_err_ext_qgrid, _y_err_ext_qgrid, _w_qgrid = get_ext_w_2d_qgrid(
+            x_obs[to_use_qgrid], y_obs[to_use_qgrid], x_err[to_use_qgrid],
+            y_err[to_use_qgrid], n)
+
+        _x_ext = concat(_x_ext_ghq, _x_ext_qgrid, axis=0)
+        _y_ext = concat(_y_ext_ghq, _y_ext_qgrid, axis=0)
+        _x_err_ext = concat(_x_err_ext_ghq, _x_err_ext_qgrid, axis=0)
+        _y_err_ext = concat(_y_err_ext_ghq, _y_err_ext_qgrid, axis=0)
+        _w = concat(_w_ghq, _w_qgrid, axis=0)
+
+    else:
+        raise ValueError(f"Invalid integration method: {int_method}")
 
     if x_transfer is None:
         ux_ext = _x_ext
@@ -143,7 +188,10 @@ def get_xyw_trans(x_obs,
         w_add = get_w_add(_x_ext, _y_ext, _x_err_ext, _y_err_ext)
         # w_add = 1 / _y_ext / np.log(10)
 
-    w = _w.reshape(1, -1) * px_xerr * wy * w_add
+    if len(_w.shape) == 1:
+        _w = _w.reshape(1, -1)
+
+    w = _w * px_xerr * wy * w_add
     w = jnp.where(is_in_range, w, 0)
 
     return jnp.array(_x_ext), jnp.array(_y_ext), jnp.array(w)

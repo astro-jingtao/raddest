@@ -3,6 +3,7 @@ import numpy as np
 from jax import jit
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
+from jax.scipy.stats import norm
 
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
@@ -104,7 +105,42 @@ def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
     y_ext = X[1] * y_err.reshape(-1, 1) + y_obs.reshape(-1, 1)
     x_err_ext = get_x_err_ext(x_err, n)
     y_err_ext = get_x_err_ext(y_err, n)
-    w = jnp.ones(n)
+    w = jnp.ones(n) / n
+    return x_ext, y_ext, x_err_ext, y_err_ext, w
+
+
+def get_ext_w_2d_grid(x_obs, y_obs, x_err, y_err, n):
+    x_ext_edge = jnp.linspace(x_obs.min(), x_obs.max(), n + 1)
+    y_ext_edge = jnp.linspace(y_obs.min(), y_obs.max(), n + 1)
+    return get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
+                                  y_ext_edge)
+
+
+def get_ext_w_2d_qgrid(x_obs, y_obs, x_err, y_err, n):
+    x_ext_edge = jnp.quantile(x_obs, jnp.linspace(0, 1, n + 1))
+    y_ext_edge = jnp.quantile(y_obs, jnp.linspace(0, 1, n + 1))
+    return get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
+                                  y_ext_edge)
+
+
+def get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
+                           y_ext_edge):
+    x_ext_cen = (x_ext_edge[:-1] + x_ext_edge[1:]) / 2
+    y_ext_cen = (y_ext_edge[:-1] + y_ext_edge[1:]) / 2
+    x_ext, y_ext = grid_and_flat(x_ext_cen, y_ext_cen)
+    x_ext = jnp.repeat(x_ext[None, :], x_obs.size, axis=0)
+    y_ext = jnp.repeat(y_ext[None, :], x_obs.size, axis=0)
+
+    x_ext_width = x_ext_edge[1:] - x_ext_edge[:-1]
+    y_ext_width = y_ext_edge[1:] - y_ext_edge[:-1]
+    x_ext_width, y_ext_width = grid_and_flat(x_ext_width, y_ext_width)
+    area = x_ext_width * y_ext_width
+
+    w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
+        y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
+
+    x_err_ext = get_x_err_ext(x_err, n * n)
+    y_err_ext = get_x_err_ext(y_err, n * n)
     return x_ext, y_ext, x_err_ext, y_err_ext, w
 
 
@@ -156,3 +192,16 @@ def shrink_gg(x_obs, x_err):
     sigma2 = jnp.var(x_obs)
     B = (sigma2 - jnp.square(x_err)) / sigma2
     return B * x_obs + (1 - B) * mu
+
+
+def grid_and_flat(x_1d, y_1d):
+    x_grid, y_grid = jnp.meshgrid(x_1d, y_1d)
+    return x_grid.flatten(), y_grid.flatten()
+
+
+def concat(*args, axis=0):
+    to_concat = []
+    for arr in args:
+        if arr.size > 0:
+            to_concat.append(arr)
+    return jnp.concatenate(to_concat, axis=axis)

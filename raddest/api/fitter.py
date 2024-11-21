@@ -555,7 +555,7 @@ class RegressorML(RegressorBase):
                      flow_batch_size=None,
                      kde_batch_size=None,
                      ignore_y_err_c_y=False,
-                     use_qmc=False):
+                     int_method='ghq'):
 
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
@@ -571,7 +571,7 @@ class RegressorML(RegressorBase):
             x_err_range,
             y_range,
             y_err_range,
-            use_qmc=use_qmc,
+            int_method=int_method,
             ignore_y_err_c_y=ignore_y_err_c_y,
             flow_batch_size=flow_batch_size,
             kde_batch_size=kde_batch_size,

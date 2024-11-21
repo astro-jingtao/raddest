@@ -2,6 +2,14 @@
 
 ## [unreleased]
 
+### Added
+
+- `get_xyw_trans` support new integration method
+  - `grid`, `qgrid`, `auto`, `ghq+qgrid`
+
+### Changed
+- `get_xyw_trans` and `RegressorML.get_ext_data` argument `use_qmc`(bool) replaced by `int_method`(string) 
+
 ## 0.7.0 - 2024-11-21
 
 ### Added

@@ -13,7 +13,7 @@ from raddest.api.fitter import FlowVI
 from raddest.api.post_processer import post_shift
 from raddest.transfer import NegLogPlus
 
-avoid_heavy = True
+avoid_heavy = False
 
 
 @pytest.mark.skipif(avoid_heavy, reason="avoid heavy tests")
