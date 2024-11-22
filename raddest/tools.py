@@ -1,9 +1,11 @@
+from functools import wraps
+
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
+from jax.scipy.stats import norm
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
-from jax.scipy.stats import norm
 
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
@@ -70,6 +72,19 @@ def get_ext_w_qmc(n, x_obs, x_err):
     return x_ext, x_err_ext, w
 
 
+def ext_w_2d_empty_wrapper(func):
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if len(args[0]) == 0:
+            return jnp.array([]), jnp.array([]), jnp.array([]), jnp.array(
+                []), jnp.array([])
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@ext_w_2d_empty_wrapper
 def get_ext_w_2d(x_obs, y_obs, x_err, y_err, n):
     ghq = GaussHermiteQuadrature(dim=2, nodes=n)
     x = ghq.X[:, 0].reshape(1, -1)
@@ -84,6 +99,7 @@ def get_ext_w_2d(x_obs, y_obs, x_err, y_err, n):
     return x_ext, y_ext, x_err_ext, y_err_ext, ghq.W
 
 
+@ext_w_2d_empty_wrapper
 def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
 
     if not is_2power(n):
@@ -109,6 +125,7 @@ def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
     return x_ext, y_ext, x_err_ext, y_err_ext, w
 
 
+@ext_w_2d_empty_wrapper
 def get_ext_w_2d_grid(x_obs, y_obs, x_err, y_err, n):
     x_ext_edge = jnp.linspace(x_obs.min(), x_obs.max(), n + 1)
     y_ext_edge = jnp.linspace(y_obs.min(), y_obs.max(), n + 1)
@@ -116,6 +133,7 @@ def get_ext_w_2d_grid(x_obs, y_obs, x_err, y_err, n):
                                   y_ext_edge)
 
 
+@ext_w_2d_empty_wrapper
 def get_ext_w_2d_qgrid(x_obs, y_obs, x_err, y_err, n):
     x_ext_edge = jnp.quantile(x_obs, jnp.linspace(0, 1, n + 1))
     y_ext_edge = jnp.quantile(y_obs, jnp.linspace(0, 1, n + 1))

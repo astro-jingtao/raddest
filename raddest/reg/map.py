@@ -67,7 +67,7 @@ def get_xyw_trans(x_obs,
                                    jnp.percentile(y_obs, 16))
         to_use_qgrid = (x_err_ratio > 0.5) | (y_err_ratio > 0.5)
 
-        print(to_use_qgrid.sum())
+        # print(to_use_qgrid.sum())
 
         _x_ext_ghq, _y_ext_ghq, _x_err_ext_ghq, _y_err_ext_ghq, _w_ghq = get_ext_w_2d(
             x_obs[~to_use_qgrid], y_obs[~to_use_qgrid], x_err[~to_use_qgrid],

@@ -1,7 +1,7 @@
 import os
 import shutil
 from functools import partial
-from typing import Union
+from typing import Union, Tuple
 
 import jax.numpy as jnp
 import joblib
@@ -431,7 +431,7 @@ class RegressorBase:
                 y_range=None,
                 y_err_range=None):
         """
-        Perform 2D-KS test.
+        Perform 2D-KS test with K times of iterations. N data points are generated, and M observed data points are selected for each iteration.
 
         Parameters
         ----------
@@ -586,6 +586,10 @@ class RegressorML(RegressorBase):
 
     def get_cov(self, x_obs, x_err, y_obs, y_err, params, **kwargs):
 
+        # make sure params is a jnp array
+        # it will affect the shape of the hessian
+        params = jnp.asarray(params)
+
         x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
                                             **kwargs)
 
@@ -593,7 +597,7 @@ class RegressorML(RegressorBase):
         hessian = self._dd_log_likelihood_ext(params, x_ext, y_ext, w)
         # we use the mean of the log-likelihood as the loss
         # here we divide the number of samples to get the true covariance
-        return -jnp.linalg.inv(jnp.array(hessian)[0, :, 0, :]) / n_sample
+        return -jnp.linalg.inv(hessian[0][0]) / n_sample
 
     def log_likelihood(self, x_obs, x_err, y_obs, y_err, params, **kwargs):
 
@@ -626,20 +630,25 @@ class RegressorML(RegressorBase):
             atol=1e-3,
             rtol=1e-3,
             verbose=False,
-            **kwargs):
+            **kwargs) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+
+        params_ml: jnp.ndarray
+        params_std: jnp.ndarray
+        cov: jnp.ndarray
 
         x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
                                             **kwargs)
 
-        params_ml = self.trainer(params_0,
-                                 x_ext,
-                                 y_ext,
-                                 w,
-                                 lr=lr,
-                                 n_step=n_step,
-                                 atol=atol,
-                                 rtol=rtol,
-                                 verbose=verbose)
+        params_ml = jnp.asarray(
+            self.trainer(params_0,
+                         x_ext,
+                         y_ext,
+                         w,
+                         lr=lr,
+                         n_step=n_step,
+                         atol=atol,
+                         rtol=rtol,
+                         verbose=verbose))
 
         cov = self.get_cov(x_obs, x_err, y_obs, y_err, params_ml, **kwargs)
 
@@ -654,7 +663,8 @@ class RegressorML(RegressorBase):
                           y_err,
                           l_bounds,
                           u_bounds,
-                          m=15):
+                          m=15,
+                          **kwargs):
 
         if len(l_bounds) != len(u_bounds):
             raise ValueError(
@@ -665,9 +675,8 @@ class RegressorML(RegressorBase):
 
         params_grid = qmc.scale(sampler.random_base2(m=m), l_bounds, u_bounds)
 
-        # TODO: more args
         log_posterior = self.log_posterior(x_obs, x_err, y_obs, y_err,
-                                           params_grid)
+                                           params_grid, **kwargs)
 
         weight = jnp.exp(log_posterior - log_posterior.max())
 
