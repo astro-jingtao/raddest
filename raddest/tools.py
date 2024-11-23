@@ -126,6 +126,35 @@ def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
 
 
 @ext_w_2d_empty_wrapper
+def get_ext_w_2d_inter_grid(x_obs, y_obs, x_err, y_err, n, k=5):
+    x_ext_edge = jnp.linspace(0, 1, n + 1)
+    y_ext_edge = jnp.linspace(0, 1, n + 1)
+    x_ext, y_ext, area = edge_to_ext(x_obs.size, x_ext_edge, y_ext_edge)
+
+    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:,
+                                                                        None]
+    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:,
+                                                                        None]
+    _y_min = jnp.clip(y_obs - k * y_err, a_min=y_obs.min(), a_max=None)[:,
+                                                                        None]
+    _y_max = jnp.clip(y_obs + k * y_err, a_min=None, a_max=y_obs.max())[:,
+                                                                        None]
+
+    # scale
+    x_ext = x_ext * (_x_max - _x_min) + _x_min
+    y_ext = y_ext * (_y_max - _y_min) + _y_min
+    area = area * (_x_max - _x_min) * (_y_max - _y_min)
+
+    x_err_ext = get_x_err_ext(x_err, n * n)
+    y_err_ext = get_x_err_ext(y_err, n * n)
+
+    w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
+        y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
+
+    return x_ext, y_ext, x_err_ext, y_err_ext, w
+
+
+@ext_w_2d_empty_wrapper
 def get_ext_w_2d_grid(x_obs, y_obs, x_err, y_err, n):
     x_ext_edge = jnp.linspace(x_obs.min(), x_obs.max(), n + 1)
     y_ext_edge = jnp.linspace(y_obs.min(), y_obs.max(), n + 1)
@@ -143,16 +172,7 @@ def get_ext_w_2d_qgrid(x_obs, y_obs, x_err, y_err, n):
 
 def get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
                            y_ext_edge):
-    x_ext_cen = (x_ext_edge[:-1] + x_ext_edge[1:]) / 2
-    y_ext_cen = (y_ext_edge[:-1] + y_ext_edge[1:]) / 2
-    x_ext, y_ext = grid_and_flat(x_ext_cen, y_ext_cen)
-    x_ext = jnp.repeat(x_ext[None, :], x_obs.size, axis=0)
-    y_ext = jnp.repeat(y_ext[None, :], x_obs.size, axis=0)
-
-    x_ext_width = x_ext_edge[1:] - x_ext_edge[:-1]
-    y_ext_width = y_ext_edge[1:] - y_ext_edge[:-1]
-    x_ext_width, y_ext_width = grid_and_flat(x_ext_width, y_ext_width)
-    area = x_ext_width * y_ext_width
+    x_ext, y_ext, area = edge_to_ext(x_obs.size, x_ext_edge, y_ext_edge)
 
     w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
         y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
@@ -160,6 +180,20 @@ def get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
     x_err_ext = get_x_err_ext(x_err, n * n)
     y_err_ext = get_x_err_ext(y_err, n * n)
     return x_ext, y_ext, x_err_ext, y_err_ext, w
+
+
+def edge_to_ext(N, x_ext_edge, y_ext_edge):
+    x_ext_cen = (x_ext_edge[:-1] + x_ext_edge[1:]) / 2
+    y_ext_cen = (y_ext_edge[:-1] + y_ext_edge[1:]) / 2
+    x_ext, y_ext = grid_and_flat(x_ext_cen, y_ext_cen)
+    x_ext = jnp.repeat(x_ext[None, :], N, axis=0)
+    y_ext = jnp.repeat(y_ext[None, :], N, axis=0)
+
+    x_ext_width = x_ext_edge[1:] - x_ext_edge[:-1]
+    y_ext_width = y_ext_edge[1:] - y_ext_edge[:-1]
+    x_ext_width, y_ext_width = grid_and_flat(x_ext_width, y_ext_width)
+    area = x_ext_width * y_ext_width
+    return x_ext, y_ext, area
 
 
 def get_p_flow(flow, x, x_err, batch_size=None):

@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.stats import gaussian_kde
 
-from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_p_flow, concat
+from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_ext_w_2d_inter_grid, get_p_flow, concat
 from ..transfer import Transfer
 
 
@@ -60,6 +60,9 @@ def get_xyw_trans(x_obs,
     elif int_method == 'qgrid':
         _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_qgrid(
             x_obs, y_obs, x_err, y_err, n)
+    elif int_method == 'inter_grid':
+        _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = get_ext_w_2d_inter_grid(
+            x_obs, y_obs, x_err, y_err, n)
     elif int_method == 'ghq+qgrid':
         x_err_ratio = 2 * x_err / (jnp.percentile(x_obs, 84) -
                                    jnp.percentile(x_obs, 16))
@@ -83,7 +86,29 @@ def get_xyw_trans(x_obs,
         _x_err_ext = concat(_x_err_ext_ghq, _x_err_ext_qgrid, axis=0)
         _y_err_ext = concat(_y_err_ext_ghq, _y_err_ext_qgrid, axis=0)
         _w = concat(_w_ghq, _w_qgrid, axis=0)
+    elif int_method == 'ghq+grid':
+        x_err_ratio = 2 * x_err / (jnp.percentile(x_obs, 84) -
+                                   jnp.percentile(x_obs, 16))
+        y_err_ratio = 2 * y_err / (jnp.percentile(y_obs, 84) -
+                                   jnp.percentile(y_obs, 16))
+        to_use_grid = (x_err_ratio > 0.5) | (y_err_ratio > 0.5)
 
+        # print(to_use_grid.sum())
+
+        _x_ext_ghq, _y_ext_ghq, _x_err_ext_ghq, _y_err_ext_ghq, _w_ghq = get_ext_w_2d(
+            x_obs[~to_use_grid], y_obs[~to_use_grid], x_err[~to_use_grid],
+            y_err[~to_use_grid], n)
+        _w_ghq = jnp.repeat(_w_ghq[None, :], (~to_use_grid).sum(), axis=0)
+
+        _x_ext_grid, _y_ext_grid, _x_err_ext_grid, _y_err_ext_grid, _w_grid = get_ext_w_2d_grid(
+            x_obs[to_use_grid], y_obs[to_use_grid], x_err[to_use_grid],
+            y_err[to_use_grid], n)
+
+        _x_ext = concat(_x_ext_ghq, _x_ext_grid, axis=0)
+        _y_ext = concat(_y_ext_ghq, _y_ext_grid, axis=0)
+        _x_err_ext = concat(_x_err_ext_ghq, _x_err_ext_grid, axis=0)
+        _y_err_ext = concat(_y_err_ext_ghq, _y_err_ext_grid, axis=0)
+        _w = concat(_w_ghq, _w_grid, axis=0)
     else:
         raise ValueError(f"Invalid integration method: {int_method}")
 

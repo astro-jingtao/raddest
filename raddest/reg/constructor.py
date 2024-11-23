@@ -87,9 +87,15 @@ def construct_linear_step(d_log_likelihood):
 
     @jit
     def step(params, x_ext, y_ext, w, lr=1e-3):
+        # f = 0.5
         dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
         k, b, sig = params
         dk, db, dsig = dparams
+
+        # dk = jnp.clip(dk, -jnp.abs(k) * f, jnp.abs(k) * f)
+        # db = jnp.clip(db, -jnp.abs(b) * f, jnp.abs(b) * f)
+        # dsig = jnp.clip(dsig, -jnp.abs(sig) * f, jnp.abs(sig) * f)
+
         k = jnp.clip(k + lr * dk, -1e2, 1e2)
         b = jnp.clip(b + lr * db, -1e2, 1e2)
         sig = jnp.clip(sig + lr * dsig, 1e-2, 1e2)
@@ -104,7 +110,7 @@ def construct_linear_student_t_step(d_log_likelihood):
     def step(params, x_ext, y_ext, w, lr=1e-3):
         dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
         k, b, df, sig = params
-        dk, db, ddf,dsig = dparams
+        dk, db, ddf, dsig = dparams
         k = jnp.clip(k + lr * dk, -1e2, 1e2)
         b = jnp.clip(b + lr * db, -1e2, 1e2)
         df = jnp.clip(df + lr * ddf, 1e-2, 1e2)
