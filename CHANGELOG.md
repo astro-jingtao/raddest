@@ -9,6 +9,8 @@
 
 ### Changed
 - `get_xyw_trans` and `RegressorML.get_ext_data` argument `use_qmc`(bool) replaced by `int_method`(string) 
+- Split `FlowVI` to `api/flowvi.py`, but can also be imported from `fitter.py`
+- `construct_x_xerr_w` set the weight of points out of given range to 0, as 2d case.
 
 ## 0.7.0 - 2024-11-21
 

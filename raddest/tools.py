@@ -36,7 +36,7 @@ def get_musig_1d(x_obs, x_err):
 def get_x_err_ext(x_err, n):
     return jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
 
-
+# TODO: Try to hold 1/sqrt(pi) cofficient 
 def get_ext_w(n, x_obs, x_err):
     x, w = get_wy_1d(n)
     mu, sig = get_musig_1d(x_obs, x_err)

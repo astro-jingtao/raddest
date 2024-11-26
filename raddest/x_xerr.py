@@ -132,6 +132,10 @@ def construct_nf_fit_func(optimizer, flow):
 
 def construct_x_xerr_w(x_obs,
                        x_err,
+                       x_min=-jnp.inf,
+                       x_max=jnp.inf,
+                       x_err_min=-jnp.inf,
+                       x_err_max=jnp.inf,
                        n_node=21,
                        qmc=False,
                        transfer: Union[Transfer, None] = None,
@@ -157,6 +161,10 @@ def construct_x_xerr_w(x_obs,
         w = jnp.nan_to_num(w, nan=0)
         u_ext = jnp.nan_to_num(u_ext, nan=0)
         v_ext = jnp.nan_to_num(v_ext, nan=0)
+
+    is_in_range = (_x_ext >= x_min) & (_x_ext <= x_max) & (
+        _x_err_ext >= x_err_min) & (_x_err_ext <= x_err_max)
+    w = jnp.where(is_in_range, w, 0)
 
     return u_ext, v_ext, w
 
@@ -238,9 +246,9 @@ def nf_fit_general(x_obs,
                    qmc=False,
                    verbose=False,
                    flow=None,
-                   x_min=0,
+                   x_min=-jnp.inf,
                    x_max=jnp.inf,
-                   x_err_min=0,
+                   x_err_min=-jnp.inf,
                    x_err_max=jnp.inf,
                    check_per_step=10,
                    early_stop=True,
@@ -251,6 +259,10 @@ def nf_fit_general(x_obs,
 
     u_ext, v_ext, w = construct_x_xerr_w(x_obs,
                                          x_err,
+                                         x_min=x_min,
+                                         x_max=x_max,
+                                         x_err_min=x_err_min,
+                                         x_err_max=x_err_max,
                                          n_node=n_node,
                                          qmc=qmc,
                                          transfer=transfer,

@@ -5,7 +5,7 @@ from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from scipy.spatial import KDTree
 
-
+# TODO: n_check
 def construct_trainer(log_likelihood, step):
 
     def trainer(params,
