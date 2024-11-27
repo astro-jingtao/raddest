@@ -93,6 +93,10 @@ class FlowVI:
             x_max=None,
             x_err_min=None,
             x_err_max=None,
+            guess_method='auto',
+            guess_recalibrate=None,
+            guess_verbose=False,
+            derive_uv_bounds=False,
             check_per_step=10,
             early_stop=True,
             max_stuck=5,
@@ -138,7 +142,11 @@ class FlowVI:
             check_per_step=check_per_step,
             early_stop=early_stop,
             max_stuck=max_stuck,
-            stuck_frac=stuck_frac)
+            stuck_frac=stuck_frac,
+            guess_method=guess_method,
+            guess_recalibrate=guess_recalibrate,
+            guess_verbose=guess_verbose,
+            derive_uv_bounds=derive_uv_bounds)
 
         self.fitted = True
 

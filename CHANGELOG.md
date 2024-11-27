@@ -2,15 +2,26 @@
 
 ## [unreleased]
 
+## 0.8.0 - 2024-11-27
+
 ### Added
 
 - `get_xyw_trans` support new integration method
   - `grid`, `qgrid`, `auto`, `ghq+qgrid`, `inter_grid`
+- `flow_params_init` support
+  - guess x by different method (supported by `shrink.shrink_data`)
+  - allow `derive_uv_bounds` 
+- `README`:
+  - bib Citation
+  - Acknowledge to multivariate Gauss Hermite quadrature Implementation
 
 ### Changed
 - `get_xyw_trans` and `RegressorML.get_ext_data` argument `use_qmc`(bool) replaced by `int_method`(string) 
 - Split `FlowVI` to `api/flowvi.py`, but can also be imported from `fitter.py`
 - `construct_x_xerr_w` set the weight of points out of given range to 0, as 2d case.
+- `Transfer` add `name`
+
+
 
 ## 0.7.0 - 2024-11-21
 

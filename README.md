@@ -45,10 +45,27 @@ pip install corner
 If you use `raddest` in your research, please cite the following paper:
 
 ```
-TBD
+@ARTICLE{2024arXiv241108747J,
+       author = {{Jing}, Tao and {Li}, Cheng},
+        title = "{Regression for Astronomical Data with Realistic Distributions, Errors and Non-linearity}",
+      journal = {arXiv e-prints},
+     keywords = {Astrophysics - Instrumentation and Methods for Astrophysics, Astrophysics - Astrophysics of Galaxies},
+         year = 2024,
+        month = nov,
+          eid = {arXiv:2411.08747},
+        pages = {arXiv:2411.08747},
+          doi = {10.48550/arXiv.2411.08747},
+archivePrefix = {arXiv},
+       eprint = {2411.08747},
+ primaryClass = {astro-ph.IM},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2024arXiv241108747J},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
 ```
 
 ## Acknowledge
+
+The implementation of multivariate Gauss Hermite quadrature is taken from https://github.com/arjungecon/QmUaArNkTet/blob/main/Final%20Assignment/PyCode/Code/ExpectationMultivariateNormal.py.
 
 Tao Jing thanks Ce Sui, Kai Wang, Kangning Diao, Yangyao Chen, and Zechang Sun for various fruitful discussions about this project.
 

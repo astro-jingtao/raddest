@@ -4,12 +4,16 @@ import jax.numpy as jnp
 import joblib
 from jax import jit
 
-from .tools import neg_log_plus, neg_log_plus_inv
-
 
 class Transfer:
 
-    def __init__(self, trans, inv, jac, n_params, params_estimator=None):
+    def __init__(self,
+                 trans,
+                 inv,
+                 jac,
+                 n_params,
+                 params_estimator=None,
+                 name=None):
         self.dumpable_core = {
             'trans': trans,
             'inv': inv,
@@ -26,6 +30,11 @@ class Transfer:
         else:
             self.params_estimator = jit(params_estimator)
 
+        if name is None:
+            self.name = 'Unnamed'
+        else:
+            self.name = name
+
     @classmethod
     def load(cls, path):
         return cls(**joblib.load(path))
@@ -35,27 +44,44 @@ class Transfer:
 
 
 def NegLogPlus():
-    return Transfer(_trans_neglogplus, _trans_neglogplus_inv,
-                    _trans_neglogplus_jac, 2, _trans_neglogplus_estimator)
+    return Transfer(_trans_neglogplus,
+                    _trans_neglogplus_inv,
+                    _trans_neglogplus_jac,
+                    2,
+                    params_estimator=_trans_neglogplus_estimator,
+                    name='NegLogPlus')
 
 
 def LogRotation():
-    return Transfer(_trans_log_rotation, _trans_log_rotation_inv,
-                    _trans_log_rotation_jac, 1)
+    return Transfer(_trans_log_rotation,
+                    _trans_log_rotation_inv,
+                    _trans_log_rotation_jac,
+                    1,
+                    name='LogRotation')
 
 
 def XShift():
-    return Transfer(_trans_xshift, _trans_xshift_inv, _trans_xshift_jac, 1)
+    return Transfer(_trans_xshift,
+                    _trans_xshift_inv,
+                    _trans_xshift_jac,
+                    1,
+                    name='XShift')
 
 
 def XShiftNegLogPlus():
-    return Transfer(_trans_xshift_neglogplus, _trans_xshift_neglogplus_inv,
-                    _trans_xshift_neglogplus_jac, 3)
+    return Transfer(_trans_xshift_neglogplus,
+                    _trans_xshift_neglogplus_inv,
+                    _trans_xshift_neglogplus_jac,
+                    3,
+                    name='XShiftNegLogPlus')
 
 
 def NegLogPlusXShift():
-    return Transfer(_trans_neglogplus_xshift, _trans_neglogplus_xshift_inv,
-                    _trans_neglogplus_xshift_jac, 3)
+    return Transfer(_trans_neglogplus_xshift,
+                    _trans_neglogplus_xshift_inv,
+                    _trans_neglogplus_xshift_jac,
+                    3,
+                    name='NegLogPlusXShift')
 
 
 # -- neglogplus --
@@ -324,7 +350,14 @@ def combine_transfers_binary(transfer1, transfer2):
     else:
         _params_estimator = None
 
-    return Transfer(_trans, _inv, _jac, n_tot, _params_estimator)
+    name = f'{transfer1.name} + {transfer2.name}'
+
+    return Transfer(_trans,
+                    _inv,
+                    _jac,
+                    n_tot,
+                    params_estimator=_params_estimator,
+                    name=name)
 
 
 def combine_transfers(*args):
@@ -332,3 +365,14 @@ def combine_transfers(*args):
         return args[0]
     else:
         return combine_transfers_binary(args[0], combine_transfers(*args[1:]))
+
+# functions
+
+@jit
+def neg_log_plus(x):
+    return jnp.where(x > 0, jnp.log(x + 1), x)
+
+
+@jit
+def neg_log_plus_inv(x):
+    return jnp.where(x > 0, jnp.exp(x) - 1, x)

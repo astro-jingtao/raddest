@@ -9,8 +9,10 @@ import pandas as pd
 from jax import grad, jit
 from jax.scipy.special import logsumexp
 from pzflow import Flow
+from pzflow.bijectors import (Chain, RollingSplineCoupling, ShiftBounds)
 
-from .tools import get_ext_w, get_ext_w_qmc, shrink_gg
+from .tools import get_ext_w, get_ext_w_qmc, transform_data
+from .shrink import shrink_data
 from .transfer import (LogRotation, NegLogPlus, NegLogPlusXShift, Transfer,
                        XShiftNegLogPlus)
 
@@ -169,41 +171,77 @@ def construct_x_xerr_w(x_obs,
     return u_ext, v_ext, w
 
 
+def get_uv_min_max(x_min, x_max, x_err_min, x_err_max, transfer,
+                   transfer_params):
+    xx = jnp.linspace(x_min, x_max, 100)
+    xexe = jnp.linspace(x_err_min, x_err_max, 100)
+    xx, xexe = jnp.meshgrid(xx, xexe)
+    uu, vv = transform_data(xx, xexe, transfer, transfer_params)
+
+    u_min = jnp.nanmin(uu)
+    u_max = jnp.nanmax(uu)
+    v_min = jnp.nanmin(vv)
+    v_max = jnp.nanmax(vv)
+
+    return u_min, u_max, v_min, v_max
+
+
 # TODO: Tweedie's formula
 def flow_params_init(x_obs,
                      x_err,
-                     x_min=0,
+                     x_min=-jnp.inf,
                      x_max=jnp.inf,
-                     x_err_min=0,
+                     x_err_min=-jnp.inf,
                      x_err_max=jnp.inf,
                      flow=None,
+                     guess_method='auto',
+                     guess_recalibrate=None,
+                     guess_verbose=False,
+                     derive_uv_bounds=False,
                      transfer: Union[Transfer, None] = None,
                      transfer_params=None,
                      n_pre=100,
                      verbose=False):
 
-    if flow is None:
-        flow = Flow(["x_obs", "x_err"])
-        x_obs_shrink = shrink_gg(x_obs, x_err)
+    if n_pre > 0:
+        x_obs_shrink = shrink_data(x_obs,
+                                   x_err,
+                                   method=guess_method,
+                                   to_recalibrate=guess_recalibrate,
+                                   verbose=guess_verbose)
 
         is_in_range = (x_obs_shrink >= x_min) & (x_obs_shrink <= x_max) & (
             x_err >= x_err_min) & (x_err <= x_err_max)
 
-        if transfer is None:
-            data_pd = pd.DataFrame({
-                'x_obs': x_obs_shrink[is_in_range],
-                'x_err': x_err[is_in_range]
-            })
-        else:
-            u, v = transfer.trans(x_obs_shrink[is_in_range],
-                                  x_err[is_in_range],
-                                  params=transfer_params)
-            data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
+        u, v = transform_data(x_obs_shrink[is_in_range], x_err[is_in_range],
+                              transfer, transfer_params)
 
+        data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
+
+    if flow is None:
+        if derive_uv_bounds:
+            u_min, u_max, v_min, v_max = get_uv_min_max(
+                x_min, x_max, x_err_min, x_err_max, transfer, transfer_params)
+            bijector = Chain(
+                ShiftBounds(np.array([u_min, v_min]), np.array([u_max, v_max]),
+                            4.0),
+                RollingSplineCoupling(2),
+            )
+
+            flow = Flow(["x_obs", "x_err"], bijector=bijector)
+        else:
+            flow = Flow(["x_obs", "x_err"])
+
+    if n_pre > 0:
         _ = flow.train(data_pd,
                        convolve_errs=False,
                        epochs=n_pre,
                        progress_bar=verbose)
+
+    if find_uv_bounds(flow._bijector_info) is None:
+        raise ValueError(
+            "Seems the flow does not have bounds, try to set n_pre > 0, or explicitly set the bounds when initializing the flow"
+        )
 
     params = [flow._params[0], flow._params[1]]
 
@@ -246,6 +284,10 @@ def nf_fit_general(x_obs,
                    qmc=False,
                    verbose=False,
                    flow=None,
+                   guess_method='auto',
+                   guess_recalibrate=None,
+                   guess_verbose=False,
+                   derive_uv_bounds=False,
                    x_min=-jnp.inf,
                    x_max=jnp.inf,
                    x_err_min=-jnp.inf,
@@ -275,6 +317,10 @@ def nf_fit_general(x_obs,
                                     x_err_min=x_err_min,
                                     x_err_max=x_err_max,
                                     flow=flow,
+                                    guess_method=guess_method,
+                                    guess_recalibrate=guess_recalibrate,
+                                    guess_verbose=guess_verbose,
+                                    derive_uv_bounds=derive_uv_bounds,
                                     transfer=transfer,
                                     transfer_params=transfer_params,
                                     n_pre=n_pre,

@@ -13,7 +13,7 @@ from jax.scipy.stats import norm
 
 from raddest.tools import get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_p_flow
 
-avoid_heavy = True
+avoid_heavy = False
 
 
 @pytest.mark.skipif(avoid_heavy, reason="avoid heavy tests")

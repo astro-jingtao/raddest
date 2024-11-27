@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import wraps
 
 import jax.numpy as jnp
@@ -7,17 +9,9 @@ from jax.scipy.stats import norm
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
 
+from .transfer import Transfer
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
-
-@jit
-def neg_log_plus(x):
-    return jnp.where(x > 0, jnp.log(x + 1), x)
-
-
-@jit
-def neg_log_plus_inv(x):
-    return jnp.where(x > 0, jnp.exp(x) - 1, x)
 
 
 def get_wy_1d(n):
@@ -36,7 +30,8 @@ def get_musig_1d(x_obs, x_err):
 def get_x_err_ext(x_err, n):
     return jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
 
-# TODO: Try to hold 1/sqrt(pi) cofficient 
+
+# TODO: Try to hold 1/sqrt(pi) cofficient
 def get_ext_w(n, x_obs, x_err):
     x, w = get_wy_1d(n)
     mu, sig = get_musig_1d(x_obs, x_err)
@@ -237,13 +232,6 @@ def get_p_flow(flow, x, x_err, batch_size=None):
 
 
 # ----
-@jit
-def shrink_gg(x_obs, x_err):
-    # Tweedie's formula when p(x_obs) is considered to be a normal distribution
-    mu = jnp.mean(x_obs)
-    sigma2 = jnp.var(x_obs)
-    B = (sigma2 - jnp.square(x_err)) / sigma2
-    return B * x_obs + (1 - B) * mu
 
 
 def grid_and_flat(x_1d, y_1d):
@@ -257,3 +245,14 @@ def concat(*args, axis=0):
         if arr.size > 0:
             to_concat.append(arr)
     return jnp.concatenate(to_concat, axis=axis)
+
+
+def transform_data(x, x_err, transfer: Transfer | None,
+                   transfer_params) -> tuple[jnp.ndarray, jnp.ndarray]:
+    
+    if transfer is None:
+        return x, x_err
+
+    u, v = transfer.trans(x, x_err, transfer_params)
+
+    return u, v
