@@ -88,20 +88,23 @@ class FlowVI:
             n_train=500,
             n_node=21,
             qmc=False,
-            verbose=False,
             x_min=None,
             x_max=None,
             x_err_min=None,
             x_err_max=None,
-            guess_method='auto',
+            guess_method='gg',
             guess_recalibrate=None,
             guess_verbose=False,
             derive_uv_bounds=False,
+            skip_fitting_if_init_good=False,
+            init_good_theshold=0.05,
+            init_check_N=10000,
             check_per_step=10,
             early_stop=True,
             max_stuck=5,
             stuck_frac=0.05,
-            re_estimate_transer_params=False):
+            re_estimate_transer_params=False,
+            verbose=False):
 
         if x_min is None:
             x_min = self.x_min
@@ -146,7 +149,10 @@ class FlowVI:
             guess_method=guess_method,
             guess_recalibrate=guess_recalibrate,
             guess_verbose=guess_verbose,
-            derive_uv_bounds=derive_uv_bounds)
+            derive_uv_bounds=derive_uv_bounds,
+            skip_fitting_if_init_good=skip_fitting_if_init_good,
+            init_good_theshold=init_good_theshold,
+            init_check_N=init_check_N)
 
         self.fitted = True
 

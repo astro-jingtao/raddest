@@ -10,6 +10,7 @@ from jax import grad, jit
 from jax.scipy.special import logsumexp
 from pzflow import Flow
 from pzflow.bijectors import (Chain, RollingSplineCoupling, ShiftBounds)
+from ndtest.ksnd import ks2d2s
 
 from .tools import get_ext_w, get_ext_w_qmc, transform_data
 from .shrink import shrink_data
@@ -43,22 +44,25 @@ def nf_fit_frame(u_ext,
             _loss = log_likelihood(params, u_ext, v_ext, w)
             if verbose:
                 print(f"step {i}: loss {_loss}")
-            if early_stop:
-                if _loss >= loss_best:
+            if _loss >= loss_best:  # be worse than previous best
+                if early_stop:
                     stuck_num += 1
                     if stuck_num > max_stuck:
                         break
-                elif jnp.abs(_loss - loss_best) < jnp.abs(stuck_frac *
-                                                          loss_best):
+            elif jnp.abs(_loss - loss_best) < jnp.abs(
+                    stuck_frac * loss_best):  # be close to previous best
+                
+                loss_best = _loss
+                params_best = params.copy()
+
+                if early_stop:
                     stuck_num += 1
-                    loss_best = _loss
-                    params_best = params.copy()
                     if stuck_num > max_stuck:
                         break
-                else:
-                    stuck_num = 0
-                    loss_best = _loss
-                    params_best = params.copy()
+            else:  # be better than previous best
+                stuck_num = 0
+                loss_best = _loss
+                params_best = params.copy()
 
             loss.append(_loss)
     return params_best, loss
@@ -194,7 +198,7 @@ def flow_params_init(x_obs,
                      x_err_min=-jnp.inf,
                      x_err_max=jnp.inf,
                      flow=None,
-                     guess_method='auto',
+                     guess_method='gg',
                      guess_recalibrate=None,
                      guess_verbose=False,
                      derive_uv_bounds=False,
@@ -204,17 +208,19 @@ def flow_params_init(x_obs,
                      verbose=False):
 
     if n_pre > 0:
-        x_obs_shrink = shrink_data(x_obs,
-                                   x_err,
-                                   method=guess_method,
-                                   to_recalibrate=guess_recalibrate,
-                                   verbose=guess_verbose)
+        x_obs_shrink, x_err_shrink = shrink_data(
+            x_obs,
+            x_err,
+            method=guess_method,
+            to_recalibrate=guess_recalibrate,
+            verbose=guess_verbose)
 
         is_in_range = (x_obs_shrink >= x_min) & (x_obs_shrink <= x_max) & (
-            x_err >= x_err_min) & (x_err <= x_err_max)
+            x_err_shrink >= x_err_min) & (x_err_shrink <= x_err_max)
 
-        u, v = transform_data(x_obs_shrink[is_in_range], x_err[is_in_range],
-                              transfer, transfer_params)
+        u, v = transform_data(x_obs_shrink[is_in_range],
+                              x_err_shrink[is_in_range], transfer,
+                              transfer_params)
 
         data_pd = pd.DataFrame({'x_obs': u, 'x_err': v})
 
@@ -282,12 +288,14 @@ def nf_fit_general(x_obs,
                    n_train=500,
                    n_node=21,
                    qmc=False,
-                   verbose=False,
                    flow=None,
-                   guess_method='auto',
+                   guess_method='gg',
                    guess_recalibrate=None,
                    guess_verbose=False,
                    derive_uv_bounds=False,
+                   skip_fitting_if_init_good=False,
+                   init_good_theshold=0.05,
+                   init_check_N=10000,
                    x_min=-jnp.inf,
                    x_max=jnp.inf,
                    x_err_min=-jnp.inf,
@@ -297,7 +305,8 @@ def nf_fit_general(x_obs,
                    max_stuck=5,
                    stuck_frac=0.05,
                    transfer: Union[Transfer, None] = None,
-                   transfer_params=None):
+                   transfer_params=None,
+                   verbose=False):
 
     u_ext, v_ext, w = construct_x_xerr_w(x_obs,
                                          x_err,
@@ -325,6 +334,26 @@ def nf_fit_general(x_obs,
                                     transfer_params=transfer_params,
                                     n_pre=n_pre,
                                     verbose=verbose)
+
+    if skip_fitting_if_init_good:
+        _, x_err_gen, x_obs_gen = gen_xobs_trans(
+            flow,
+            init_check_N,
+            x_min,
+            x_max,
+            x_err_min,
+            x_err_max,
+            transfer=transfer,
+            transfer_params=transfer_params,
+            return_numpy=True)
+
+        _, p = ks2d2s(x_obs_gen, x_err_gen, x_obs, x_err)
+
+        if verbose:
+            print(f"KS test p-value for init guess: {p}")
+
+        if p > init_good_theshold:
+            return flow, [], transfer_params
 
     update_params, log_likelihood = construct_nf_fit_func(optimizer, flow)
 
