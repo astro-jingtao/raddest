@@ -13,7 +13,6 @@ from .transfer import Transfer
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
 
 
-
 def get_wy_1d(n):
     x, w = hermgauss(n)
     x = jnp.array(x.reshape(1, -1))
@@ -31,14 +30,13 @@ def get_x_err_ext(x_err, n):
     return jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
 
 
-# TODO: Try to hold 1/sqrt(pi) cofficient
 def get_ext_w(n, x_obs, x_err):
+    # https://en.wikipedia.org/wiki/Gauss%E2%80%93Hermite_quadrature
     x, w = get_wy_1d(n)
     mu, sig = get_musig_1d(x_obs, x_err)
     x_ext = jnp.sqrt(2) * sig * x + mu
     x_err_ext = jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
-    # w 应该有个 1/sqrt(pi) 的系数，但对结果没有影响
-    return x_ext, x_err_ext, w
+    return x_ext, x_err_ext, w / jnp.sqrt(jnp.pi)
 
 
 def round_to_2power(x):
@@ -63,8 +61,31 @@ def get_ext_w_qmc(n, x_obs, x_err):
     mu, sig = get_musig_1d(x_obs, x_err)
     x_ext = jnp.array(x * sig + mu)
     x_err_ext = jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
-    w = jnp.ones_like(x_ext)
+    w = jnp.ones_like(x_ext) / n
     return x_ext, x_err_ext, w
+
+
+def get_ext_w_inter_grid(n, x_obs, x_err, k=5):
+    x_ext_edge = jnp.linspace(0, 1, n + 1)
+    x_ext, area = edge_to_ext(x_obs.size, x_ext_edge)
+    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:,
+                                                                        None]
+    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:,
+                                                                        None]
+    x_ext = x_ext * (_x_max - _x_min) + _x_min
+    area = area * (_x_max - _x_min)
+    x_err_ext = get_x_err_ext(x_err, n)
+
+    w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * area
+
+    return x_ext, x_err_ext, w
+
+
+def edge_to_ext(N, x_ext_edge):
+    x_ext = (x_ext_edge[1:] + x_ext_edge[:-1]) / 2
+    x_ext = jnp.repeat(x_ext[None, :], N, axis=0)
+    area = (x_ext_edge[1:] - x_ext_edge[:-1])
+    return x_ext, area
 
 
 def ext_w_2d_empty_wrapper(func):
@@ -124,7 +145,7 @@ def get_ext_w_2d_qmc(x_obs, y_obs, x_err, y_err, n):
 def get_ext_w_2d_inter_grid(x_obs, y_obs, x_err, y_err, n, k=5):
     x_ext_edge = jnp.linspace(0, 1, n + 1)
     y_ext_edge = jnp.linspace(0, 1, n + 1)
-    x_ext, y_ext, area = edge_to_ext(x_obs.size, x_ext_edge, y_ext_edge)
+    x_ext, y_ext, area = edge_to_ext_2d(x_obs.size, x_ext_edge, y_ext_edge)
 
     _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:,
                                                                         None]
@@ -167,7 +188,7 @@ def get_ext_w_2d_qgrid(x_obs, y_obs, x_err, y_err, n):
 
 def get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
                            y_ext_edge):
-    x_ext, y_ext, area = edge_to_ext(x_obs.size, x_ext_edge, y_ext_edge)
+    x_ext, y_ext, area = edge_to_ext_2d(x_obs.size, x_ext_edge, y_ext_edge)
 
     w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
         y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
@@ -177,7 +198,7 @@ def get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n, x_ext_edge,
     return x_ext, y_ext, x_err_ext, y_err_ext, w
 
 
-def edge_to_ext(N, x_ext_edge, y_ext_edge):
+def edge_to_ext_2d(N, x_ext_edge, y_ext_edge):
     x_ext_cen = (x_ext_edge[:-1] + x_ext_edge[1:]) / 2
     y_ext_cen = (y_ext_edge[:-1] + y_ext_edge[1:]) / 2
     x_ext, y_ext = grid_and_flat(x_ext_cen, y_ext_cen)
@@ -249,7 +270,7 @@ def concat(*args, axis=0):
 
 def transform_data(x, x_err, transfer: Transfer | None,
                    transfer_params) -> tuple[jnp.ndarray, jnp.ndarray]:
-    
+
     if transfer is None:
         return x, x_err
 

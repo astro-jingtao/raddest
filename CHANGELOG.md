@@ -2,6 +2,16 @@
 
 ## [unreleased]
 
+### Added
+
+- `construct_x_xerr_w` support new integration method `inter_grid`
+- `get_posterior_mcmc` for `RegressorML`
+- `RegressorSaturatedLogLinearML`
+
+### Changed
+
+- `construct_x_xerr_w` use `int_method` argument to replace previous `qmc`
+
 ## 0.8.0 - 2024-11-27
 
 ### Added

@@ -8,18 +8,22 @@ from jax.scipy.stats import norm
 from jax.scipy.stats import t as student_t
 from ndtest.ksnd import ks2d2s
 from scipy.stats import qmc
+import emcee
 
 from ..grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
                            get_weighted_res, grid_search, zoom_in_grid)
 from ..reg.constructor import (construct_generator_cond, construct_ks_compare,
                                construct_likelihood, construct_linear_step,
                                construct_linear_student_t_step,
-                               construct_log_likelihood, construct_trainer)
+                               construct_log_likelihood,
+                               construct_saturated_linear_step,
+                               construct_trainer)
+from ..reg.func import saturated_linear_smooth
+from ..reg.func_jax import saturated_linear_smooth_jax
 from ..reg.ks import (gen_xy_obs_prepare, linear_scatter, loglinear_scatter,
                       loglinear_scatter_student_t, parser_anylinear,
                       print_mean_std_loglinear)
 from ..reg.map import get_w_add_lognorm, get_xyw_trans
-from .flowvi import FlowVI
 
 
 class RegressorBase:
@@ -361,9 +365,53 @@ class RegressorML(RegressorBase):
         log_posterior = self.log_posterior(x_obs, x_err, y_obs, y_err,
                                            params_grid, **kwargs)
 
-        weight = jnp.exp(log_posterior - log_posterior.max())
+        weight = jnp.exp(log_posterior - jnp.nanmax(log_posterior))
 
         return params_grid, weight
+
+    def get_posterior_mcmc(self,
+                           x_obs,
+                           x_err,
+                           y_obs,
+                           y_err,
+                           *,
+                           ndim,
+                           initial_state,
+                           nsteps=10000,
+                           sampler_kwargs=None,
+                           run_mcmc_kwargs=None,
+                           sampler=None,
+                           **kwargs) -> emcee.EnsembleSampler:
+
+        if sampler_kwargs is None:
+            sampler_kwargs = {}
+
+        if run_mcmc_kwargs is None:
+            run_mcmc_kwargs = {}
+
+        x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
+                                            **kwargs)
+
+        def log_prob_target(params):
+            n_sample = x_obs.size
+            log_p = self._v_log_posterior_ext(self._get_v_params(params),
+                                              x_ext, y_ext, w, n_sample)
+            # nan to -inf
+            return jnp.where(jnp.isnan(log_p), -jnp.inf, log_p)
+
+        initial_state = jnp.asarray(initial_state)
+
+        if sampler is None:
+            nwalkers = initial_state.shape[0]
+            sampler = emcee.EnsembleSampler(nwalkers,
+                                            ndim,
+                                            log_prob_target,
+                                            vectorize=True,
+                                            **sampler_kwargs)
+
+        sampler.run_mcmc(initial_state, nsteps, **run_mcmc_kwargs)
+
+        return sampler
 
     def _get_v_params(self, params):
         params = jnp.asarray(params)
@@ -409,6 +457,52 @@ class RegressorLogLinearML(RegressorML):
                          step_constructor=construct_linear_step,
                          get_w_add=get_w_add_lognorm,
                          func_x2y=loglinear_scatter,
+                         log_prior=log_prior)
+
+
+class RegressorSaturatedLogLinearML(RegressorML):
+
+    def __init__(self, xflow, yflow, width=0.1, log_prior=None):
+
+        def saturated_loglinear_scatter(x, params):
+            params_loglinear = params[:-1]
+            sig = params[-1]
+            log10_y_pred = saturated_linear_smooth(np.log10(x),
+                                                   *params_loglinear,
+                                                   width=0.01)
+            return np.power(
+                10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
+
+        @jit
+        def saturated_loglinear_jax(x, params):
+            '''
+            params: (k, b, x0, x1, c0, c1)
+            '''
+            log10_y_pred = saturated_linear_smooth_jax(jnp.log10(jnp.abs(x)),
+                                                       *params,
+                                                       width=width)
+            return log10_y_pred
+
+        @jit
+        def lognorm(x, y, params):
+            return jnp.where(
+                (x < 0) | (y < 0), 0,
+                norm.pdf(jnp.log10(jnp.abs(y)),
+                         loc=saturated_loglinear_jax(x, params[:-1]),
+                         scale=params[-1]))
+
+        if log_prior is None:
+
+            def log_prior(params):
+                is_bad = (params[-1] <= 0) | (params[2] > params[3])
+                return jnp.where(is_bad, -jnp.inf, 0)
+
+        super().__init__(xflow,
+                         yflow,
+                         p_cond=lognorm,
+                         step_constructor=construct_saturated_linear_step,
+                         get_w_add=get_w_add_lognorm,
+                         func_x2y=saturated_loglinear_scatter,
                          log_prior=log_prior)
 
 

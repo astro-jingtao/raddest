@@ -12,7 +12,7 @@ from pzflow import Flow
 from pzflow.bijectors import (Chain, RollingSplineCoupling, ShiftBounds)
 from ndtest.ksnd import ks2d2s
 
-from .tools import get_ext_w, get_ext_w_qmc, transform_data
+from .tools import get_ext_w, get_ext_w_qmc, get_ext_w_inter_grid, transform_data
 from .shrink import shrink_data
 from .transfer import (LogRotation, NegLogPlus, NegLogPlusXShift, Transfer,
                        XShiftNegLogPlus)
@@ -51,7 +51,7 @@ def nf_fit_frame(u_ext,
                         break
             elif jnp.abs(_loss - loss_best) < jnp.abs(
                     stuck_frac * loss_best):  # be close to previous best
-                
+
                 loss_best = _loss
                 params_best = params.copy()
 
@@ -143,7 +143,7 @@ def construct_x_xerr_w(x_obs,
                        x_err_min=-jnp.inf,
                        x_err_max=jnp.inf,
                        n_node=21,
-                       qmc=False,
+                       int_method='ghq',
                        transfer: Union[Transfer, None] = None,
                        transfer_params=None):
     '''
@@ -151,10 +151,14 @@ def construct_x_xerr_w(x_obs,
     x_min, x_max, x_err_min, x_err_max are for original value
     '''
 
-    if qmc:
-        _x_ext, _x_err_ext, w = get_ext_w_qmc(n_node, x_obs, x_err)
-    else:
+    if int_method == 'ghq':
         _x_ext, _x_err_ext, w = get_ext_w(n_node, x_obs, x_err)
+    elif int_method == 'qmc':
+        _x_ext, _x_err_ext, w = get_ext_w_qmc(n_node, x_obs, x_err)
+    elif int_method == 'inter_grid':
+        _x_ext, _x_err_ext, w = get_ext_w_inter_grid(n_node, x_obs, x_err)
+    else:
+        raise ValueError(f"Invalid integration method: {int_method}")
 
     if transfer is None:
         u_ext = _x_ext
@@ -287,7 +291,7 @@ def nf_fit_general(x_obs,
                    n_pre=100,
                    n_train=500,
                    n_node=21,
-                   qmc=False,
+                   int_method='ghq',
                    flow=None,
                    guess_method='gg',
                    guess_recalibrate=None,
@@ -315,7 +319,7 @@ def nf_fit_general(x_obs,
                                          x_err_min=x_err_min,
                                          x_err_max=x_err_max,
                                          n_node=n_node,
-                                         qmc=qmc,
+                                         int_method=int_method,
                                          transfer=transfer,
                                          transfer_params=transfer_params)
 

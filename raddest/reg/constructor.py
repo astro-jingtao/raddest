@@ -119,6 +119,25 @@ def construct_linear_student_t_step(d_log_likelihood):
 
     return step
 
+def construct_saturated_linear_step(d_log_likelihood):
+
+    @jit
+    def step(params, x_ext, y_ext, w, lr=1e-3):
+        dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
+        k, b, x0, x1, c0, c1, sig = params
+        dk, db, dx0, dx1, dc0, dc1, dsig = dparams
+
+        k = jnp.clip(k + lr * dk, -1e2, 1e2)
+        b = jnp.clip(b + lr * db, -1e2, 1e2)
+        x0 = jnp.clip(x0 + lr * dx0, -1e2, 1e2)
+        x1 = jnp.clip(x1 + lr * dx1, -1e2, 1e2)
+        c0 = jnp.clip(c0 + lr * dc0, -1e2, 1e2)
+        c1 = jnp.clip(c1 + lr * dc1, -1e2, 1e2)
+
+        sig = jnp.clip(sig + lr * dsig, 1e-2, 1e2)
+        return (k, b, x0, x1, c0, c1, sig)
+
+    return step
 
 def construct_log_likelihood(likelihood):
 
