@@ -144,6 +144,49 @@ def construct_saturated_linear_step(d_log_likelihood):
     return step
 
 
+def parse_piecewise_params(n_piece, params):
+    (b0, x0), others = params[:2], params[2:]
+    k_lst = others[:n_piece]
+    dx_lst = others[n_piece:]
+    return b0, x0, k_lst, dx_lst
+
+
+def flat_piecewise_params(b0, x0, k_lst, dx_lst):
+    return (b0, x0, *k_lst, *dx_lst)
+
+
+def piecewise_linear_step_factory(n_piece):
+
+    def constructor(d_log_likelihood):
+
+        @jit
+        def step(params, x_ext, y_ext, w, lr=1e-3):
+            dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
+            b0, x0, k_lst, dx_lst = parse_piecewise_params(
+                n_piece, params[:-1])
+            sig = params[-1]
+            k_lst = jnp.asarray(k_lst)
+            dx_lst = jnp.asarray(dx_lst)
+
+            db0, dx0, dk_lst, ddx_lst = parse_piecewise_params(
+                n_piece, jnp.nan_to_num(jnp.asarray(dparams[:-1]), nan=0.0))
+            dsig = jnp.nan_to_num(dparams[-1], nan=0.0)
+
+            b0 = jnp.clip(b0 + lr * db0, -1e2, 1e2)
+            x0 = jnp.clip(x0 + lr * dx0, -1e2, 1e2)
+            k_lst = jnp.clip(k_lst + lr * dk_lst, -1e2, 1e2)
+            dx_lst = jnp.clip(dx_lst + lr * ddx_lst, 1e-2, 1e2)
+            sig = jnp.clip(sig + lr * dsig, 1e-2, 1e2)
+
+            params_new = flat_piecewise_params(b0, x0, k_lst, dx_lst)
+
+            return (*params_new, sig)
+
+        return step
+
+    return constructor
+
+
 def construct_log_likelihood(likelihood):
 
     @jit
@@ -170,7 +213,7 @@ def construct_generator_cond(func_x2y):
 
         y_pred = func_x2y(x, params)
         y_pred = np.clip(y_pred, y_min, y_max)
-        y_pred = np.nan_to_num(y_pred, nan=np.mean(y_kdt)) # nan to mean
+        y_pred = np.nan_to_num(y_pred, nan=np.mean(y_kdt))  # nan to mean
         _, y_err_match_index = tree.query(y_pred.reshape(-1, 1))
         y_err_pred = y_err_kdt[y_err_match_index]
         y_obs_pred = y_pred + np.random.normal(scale=y_err_pred)

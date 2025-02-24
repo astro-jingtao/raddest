@@ -7,6 +7,7 @@
 - `construct_x_xerr_w` support new integration method `inter_grid`
 - `get_posterior_mcmc` for `RegressorML`
 - `RegressorSaturatedLogLinearML`
+- `RegressorPiecewiseLogLinearML`
 
 ### Changed
 
