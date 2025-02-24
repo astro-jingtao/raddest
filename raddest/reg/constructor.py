@@ -5,7 +5,9 @@ from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
 from scipy.spatial import KDTree
 
+
 # TODO: n_check
+# TODO: step with state
 def construct_trainer(log_likelihood, step):
 
     def trainer(params,
@@ -119,13 +121,15 @@ def construct_linear_student_t_step(d_log_likelihood):
 
     return step
 
+
 def construct_saturated_linear_step(d_log_likelihood):
 
     @jit
     def step(params, x_ext, y_ext, w, lr=1e-3):
         dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
         k, b, x0, x1, c0, c1, sig = params
-        dk, db, dx0, dx1, dc0, dc1, dsig = dparams
+        dk, db, dx0, dx1, dc0, dc1, dsig = jnp.nan_to_num(jnp.asarray(dparams),
+                                                          nan=0.0)
 
         k = jnp.clip(k + lr * dk, -1e2, 1e2)
         b = jnp.clip(b + lr * db, -1e2, 1e2)
@@ -138,6 +142,7 @@ def construct_saturated_linear_step(d_log_likelihood):
         return (k, b, x0, x1, c0, c1, sig)
 
     return step
+
 
 def construct_log_likelihood(likelihood):
 
@@ -164,6 +169,8 @@ def construct_generator_cond(func_x2y):
         tree = KDTree(y_kdt.reshape(-1, 1))
 
         y_pred = func_x2y(x, params)
+        y_pred = np.clip(y_pred, y_min, y_max)
+        y_pred = np.nan_to_num(y_pred, nan=np.mean(y_kdt)) # nan to mean
         _, y_err_match_index = tree.query(y_pred.reshape(-1, 1))
         y_err_pred = y_err_kdt[y_err_match_index]
         y_obs_pred = y_pred + np.random.normal(scale=y_err_pred)

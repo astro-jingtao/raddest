@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.special import expit as _sigmoid
 
 def get_saturated_pars(k, b, x0, x1, c0, c1):
     n0 = k / (k * x0 + b - c0)
@@ -32,7 +32,7 @@ def saturated_linear(x,
 def saturated_linear_smooth(x, k, b, x0, x1, c0, c1, width=0.01):
 
     def sigmoid(x, x0, beta):
-        return 1 / (1 + np.exp(-beta * (x - x0)))
+        return _sigmoid(beta * (x - x0))
 
     n0, n1, m0, m1 = get_saturated_pars(k, b, x0, x1, c0, c1)
     w_low = sigmoid(x, x0, -1 / width)

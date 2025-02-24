@@ -77,6 +77,43 @@ class RegressorBase:
                x_err_range=None,
                y_range=None,
                y_err_range=None):
+        '''
+        Generate N data points.
+        
+        Parameters
+        ----------
+        params : dict
+            Modle parameters used for the data generations.
+        N : int, optional
+            Number of points to generate. Default is 10000.
+        x_range : tuple of (float, float), optional
+            Range (min, max) for x values. Default is None.
+            If None, x_range is set to [self.xflow.x_min, self.xflow.x_max].
+        x_err_range : tuple of (float, float), optional
+            Range (min, max) for x errors. Default is None.
+            If None, x_err_range is set to [self.xflow.x_err_min, self.xflow.x_err_max].
+        y_range : tuple of (float, float), optional
+            Range (min, max) for y values. Default is None.
+            If None, y_range is set to [self.yflow.x_min, self.yflow.x_max].
+        y_err_range : tuple of (float, float), optional
+            Range (min, max) for y errors. Default is None.
+            If None, y_err_range is set to [self.yflow.x_err_min, self.yflow.x_err_max].
+
+        Returns
+        --------
+        x_obs_gen : array_like
+            Generated x values.
+        y_obs_gen : array_like
+            Generated y values.
+        x_err_gen : array_like
+            Generated x errors.
+        y_err_gen : array_like
+            Generated y errors.
+        x_gen : array_like
+            Generated x values.
+        y_gen : array_like
+            Generated y values.
+        '''
 
         self._check_generator_cond()
 
@@ -166,6 +203,8 @@ class RegressorBase:
                 "Warning: M is larger than the number of data points, M is set to the number of data points."
             )
             M = N_data
+
+        # TODO: parallelize this loop
 
         D_lst, p_lst = [], []
 
@@ -494,7 +533,8 @@ class RegressorSaturatedLogLinearML(RegressorML):
         if log_prior is None:
 
             def log_prior(params):
-                is_bad = (params[-1] <= 0) | (params[2] > params[3])
+                k, b, x0, x1, c0, c1, sig = params
+                is_bad = (sig <= 0) | (x0 > x1) | ((c1 - c0) * k < 0)
                 return jnp.where(is_bad, -jnp.inf, 0)
 
         super().__init__(xflow,
