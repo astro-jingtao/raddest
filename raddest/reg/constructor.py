@@ -155,22 +155,29 @@ def flat_piecewise_params(b0, x0, k_lst, dx_lst):
     return (b0, x0, *k_lst, *dx_lst)
 
 
-def piecewise_linear_step_factory(n_piece):
+def piecewise_linear_step_factory(n_piece, is_fixed=None):
+
+    if is_fixed is None:
+        is_fixed = [False] * (2 * n_piece + 1)
+
+    is_fixed = jnp.asarray(is_fixed)
 
     def constructor(d_log_likelihood):
 
         @jit
         def step(params, x_ext, y_ext, w, lr=1e-3):
             dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
-            b0, x0, k_lst, dx_lst = parse_piecewise_params(
-                n_piece, params[:-1])
+            dparams = jnp.nan_to_num(jnp.asarray(dparams), nan=0.0)
+            dparams = jnp.where(is_fixed, 0.0, dparams)
+
+            b0, x0, k_lst, dx_lst = parse_piecewise_params(n_piece, params[:-1])
             sig = params[-1]
             k_lst = jnp.asarray(k_lst)
             dx_lst = jnp.asarray(dx_lst)
 
             db0, dx0, dk_lst, ddx_lst = parse_piecewise_params(
-                n_piece, jnp.nan_to_num(jnp.asarray(dparams[:-1]), nan=0.0))
-            dsig = jnp.nan_to_num(dparams[-1], nan=0.0)
+                n_piece, dparams[:-1])
+            dsig = dparams[-1]
 
             b0 = jnp.clip(b0 + lr * db0, -1e2, 1e2)
             x0 = jnp.clip(x0 + lr * dx0, -1e2, 1e2)

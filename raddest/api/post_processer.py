@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 from ndtest.ksnd import ks2d2s
-from raddest.api.fitter import FlowVI
+from raddest.api.flowvi import FlowVI
 from raddest.transfer import combine_transfers, XShift
 
 

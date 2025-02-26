@@ -10,21 +10,25 @@ from jax.scipy.stats import t as student_t
 from ndtest.ksnd import ks2d2s
 from scipy.stats import qmc
 
-from ..grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
-                           get_weighted_res, grid_search, zoom_in_grid)
-from ..reg.constructor import (
+from raddest.api.utils import \
+    to_each_piece_params as _to_each_piece_params
+from raddest.grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
+                                 get_weighted_res, grid_search, zoom_in_grid)
+from raddest.reg.constructor import (
     construct_generator_cond, construct_ks_compare, construct_likelihood,
     construct_linear_step, construct_linear_student_t_step,
     construct_log_likelihood, construct_saturated_linear_step,
-    construct_trainer, piecewise_linear_step_factory)
-from ..reg.constructor import parse_piecewise_params as _parse_piecewise_params
-from ..reg.func import generate_piecewise_linear, saturated_linear_smooth
-from ..reg.func_jax import (generate_piecewise_linear_jax,
-                            saturated_linear_smooth_jax)
-from ..reg.ks import (gen_xy_obs_prepare, linear_scatter, loglinear_scatter,
-                      loglinear_scatter_student_t, parser_anylinear,
-                      print_mean_std_loglinear)
-from ..reg.map import get_w_add_lognorm, get_xyw_trans
+    construct_trainer)
+from raddest.reg.constructor import \
+    parse_piecewise_params as _parse_piecewise_params
+from raddest.reg.constructor import piecewise_linear_step_factory
+from raddest.reg.func import generate_piecewise_linear, saturated_linear_smooth
+from raddest.reg.func_jax import (generate_piecewise_linear_jax,
+                                  saturated_linear_smooth_jax)
+from raddest.reg.ks import (gen_xy_obs_prepare, linear_scatter,
+                            loglinear_scatter, loglinear_scatter_student_t,
+                            parser_anylinear, print_mean_std_loglinear)
+from raddest.reg.map import get_w_add_lognorm, get_xyw_trans
 
 
 class RegressorBase:
@@ -549,7 +553,16 @@ class RegressorSaturatedLogLinearML(RegressorML):
 
 class RegressorPiecewiseLogLinearML(RegressorML):
 
-    def __init__(self, xflow, yflow, n_piece, width=0.1, log_prior=None):
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 n_piece,
+                 width=0.1,
+                 is_fixed=None,
+                 log_prior=None):
+
+        if is_fixed is None:
+            is_fixed = jnp.asarray([False] * (2 * n_piece + 1))
 
         self.n_piece = n_piece
         piecewise_linear = generate_piecewise_linear(n_piece)
@@ -593,38 +606,36 @@ class RegressorPiecewiseLogLinearML(RegressorML):
                 is_bad = jnp.any(dx_lst <= 0) | (sig <= 0)
                 return jnp.where(is_bad, -jnp.inf, 0)
 
-        super().__init__(
-            xflow,
-            yflow,
-            p_cond=lognorm,
-            step_constructor=piecewise_linear_step_factory(n_piece),
-            get_w_add=get_w_add_lognorm,
-            func_x2y=piecewise_loglinear_scatter,
-            log_prior=log_prior)
+        super().__init__(xflow,
+                         yflow,
+                         p_cond=lognorm,
+                         step_constructor=piecewise_linear_step_factory(
+                             n_piece, is_fixed),
+                         get_w_add=get_w_add_lognorm,
+                         func_x2y=piecewise_loglinear_scatter,
+                         log_prior=log_prior)
 
     def parse_piecewise_params(self, params):
         return _parse_piecewise_params(self.n_piece, params)
 
     def to_each_piece_params(self, params):
-        sig = params[-1]
-        b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-1])
-        k_lst = list(k_lst)
-        b_lst = [b0]
-        x_lst = [x0]
-        for i in range(1, self.n_piece):
-            this_b = (k_lst[i - 1] - k_lst[i]) * x_lst[i - 1] + b_lst[i - 1]
-            b_lst.append(this_b)
-            if i < self.n_piece - 1:
-                this_x = x_lst[i - 1] + dx_lst[i - 1]
-                x_lst.append(this_x)
-        k_lst = np.asarray(k_lst)
-        b_lst = np.asarray(b_lst)
-        x_lst = np.asarray(x_lst)
-        sig = float(sig)
-        return k_lst, b_lst, x_lst, sig
-
-    # def pack_params(self, b0, x0, k_lst, dx_lst):
-    #     ...
+        return _to_each_piece_params(self.n_piece, params)
+        # sig = params[-1]
+        # b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-1])
+        # k_lst = list(k_lst)
+        # b_lst = [b0]
+        # x_lst = [x0]
+        # for i in range(1, self.n_piece):
+        #     this_b = (k_lst[i - 1] - k_lst[i]) * x_lst[i - 1] + b_lst[i - 1]
+        #     b_lst.append(this_b)
+        #     if i < self.n_piece - 1:
+        #         this_x = x_lst[i - 1] + dx_lst[i - 1]
+        #         x_lst.append(this_x)
+        # k_lst = np.asarray(k_lst)
+        # b_lst = np.asarray(b_lst)
+        # x_lst = np.asarray(x_lst)
+        # sig = float(sig)
+        # return k_lst, b_lst, x_lst, sig
 
 
 class RegressorLogLinearStudentTML(RegressorML):

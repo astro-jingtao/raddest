@@ -8,6 +8,7 @@
 - `get_posterior_mcmc` for `RegressorML`
 - `RegressorSaturatedLogLinearML`
 - `RegressorPiecewiseLogLinearML`
+  - Allow fixed parameters
 
 ### Changed
 
