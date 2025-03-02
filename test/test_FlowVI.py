@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 
-from raddest.api.fitter import FlowVI
+from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
 
 

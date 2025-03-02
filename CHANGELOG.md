@@ -6,9 +6,10 @@
 
 - `construct_x_xerr_w` support new integration method `inter_grid`
 - `get_posterior_mcmc` for `RegressorML`
-- `RegressorSaturatedLogLinearML`
-- `RegressorPiecewiseLogLinearML`
-  - Allow fixed parameters
+- `SaturatedLogLinearML`
+- `PiecewiseLogLinearML`
+  - Allow linear equation constrain
+- Remove 'Regressor' in the name of each pre-defined ML and KS based regressors.
 
 ### Changed
 

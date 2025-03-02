@@ -155,12 +155,28 @@ def flat_piecewise_params(b0, x0, k_lst, dx_lst):
     return (b0, x0, *k_lst, *dx_lst)
 
 
-def piecewise_linear_step_factory(n_piece, is_fixed=None):
+def project_to_hyperplane(y, A, b):
+    """
+    project y onto the hyperplane Ax+b
+    """
+    Ay_minus_b = A.dot(y) - b
+    AAT = A.dot(A.T)
+    lambda_ = jnp.linalg.pinv(AAT) @ Ay_minus_b
+    projection = y - A.T.dot(lambda_)
+    return projection
 
-    if is_fixed is None:
-        is_fixed = [False] * (2 * n_piece + 1)
 
-    is_fixed = jnp.asarray(is_fixed)
+def piecewise_linear_step_factory(n_piece, A_eq=None, b_eq=None):
+
+    if A_eq is not None:
+        A_eq = jnp.asarray(A_eq)
+        if b_eq is None:
+            b_eq = jnp.zeros(A_eq.shape[1])
+        else:
+            b_eq = jnp.asarray(b_eq)
+    else:
+        if b_eq is not None:
+            raise ValueError("b_eq should be None if A_eq is None")
 
     def constructor(d_log_likelihood):
 
@@ -168,9 +184,9 @@ def piecewise_linear_step_factory(n_piece, is_fixed=None):
         def step(params, x_ext, y_ext, w, lr=1e-3):
             dparams = d_log_likelihood(params, x_ext, y_ext, w)[0]
             dparams = jnp.nan_to_num(jnp.asarray(dparams), nan=0.0)
-            dparams = jnp.where(is_fixed, 0.0, dparams)
 
-            b0, x0, k_lst, dx_lst = parse_piecewise_params(n_piece, params[:-1])
+            b0, x0, k_lst, dx_lst = parse_piecewise_params(
+                n_piece, params[:-1])
             sig = params[-1]
             k_lst = jnp.asarray(k_lst)
             dx_lst = jnp.asarray(dx_lst)
@@ -185,9 +201,13 @@ def piecewise_linear_step_factory(n_piece, is_fixed=None):
             dx_lst = jnp.clip(dx_lst + lr * ddx_lst, 1e-2, 1e2)
             sig = jnp.clip(sig + lr * dsig, 1e-2, 1e2)
 
-            params_new = flat_piecewise_params(b0, x0, k_lst, dx_lst)
+            params_new = jnp.asarray(
+                (*flat_piecewise_params(b0, x0, k_lst, dx_lst), sig))
 
-            return (*params_new, sig)
+            if A_eq is not None:
+                params_new = project_to_hyperplane(params_new, A_eq, b_eq)
+
+            return params_new
 
         return step
 

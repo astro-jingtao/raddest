@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from raddest.api.fitter import FlowVI
+from raddest.api.flowvi import FlowVI
 from raddest.api.post_processer import post_shift
 from raddest.transfer import NegLogPlus
 

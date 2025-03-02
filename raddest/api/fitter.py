@@ -464,7 +464,7 @@ class RegressorML(RegressorBase):
         return params
 
 
-class RegressorLogLinearML(RegressorML):
+class LogLinearML(RegressorML):
 
     def __init__(self, xflow, yflow, log_prior=None):
 
@@ -504,7 +504,7 @@ class RegressorLogLinearML(RegressorML):
                          log_prior=log_prior)
 
 
-class RegressorSaturatedLogLinearML(RegressorML):
+class SaturatedLogLinearML(RegressorML):
 
     def __init__(self, xflow, yflow, width=0.1, log_prior=None):
 
@@ -551,18 +551,16 @@ class RegressorSaturatedLogLinearML(RegressorML):
                          log_prior=log_prior)
 
 
-class RegressorPiecewiseLogLinearML(RegressorML):
+class PiecewiseLogLinearML(RegressorML):
 
     def __init__(self,
                  xflow,
                  yflow,
                  n_piece,
                  width=0.1,
-                 is_fixed=None,
+                 A_eq=None,
+                 b_eq=None,
                  log_prior=None):
-
-        if is_fixed is None:
-            is_fixed = jnp.asarray([False] * (2 * n_piece + 1))
 
         self.n_piece = n_piece
         piecewise_linear = generate_piecewise_linear(n_piece)
@@ -610,7 +608,7 @@ class RegressorPiecewiseLogLinearML(RegressorML):
                          yflow,
                          p_cond=lognorm,
                          step_constructor=piecewise_linear_step_factory(
-                             n_piece, is_fixed),
+                             n_piece, A_eq=A_eq, b_eq=b_eq),
                          get_w_add=get_w_add_lognorm,
                          func_x2y=piecewise_loglinear_scatter,
                          log_prior=log_prior)
@@ -620,25 +618,78 @@ class RegressorPiecewiseLogLinearML(RegressorML):
 
     def to_each_piece_params(self, params):
         return _to_each_piece_params(self.n_piece, params)
-        # sig = params[-1]
-        # b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-1])
-        # k_lst = list(k_lst)
-        # b_lst = [b0]
-        # x_lst = [x0]
-        # for i in range(1, self.n_piece):
-        #     this_b = (k_lst[i - 1] - k_lst[i]) * x_lst[i - 1] + b_lst[i - 1]
-        #     b_lst.append(this_b)
-        #     if i < self.n_piece - 1:
-        #         this_x = x_lst[i - 1] + dx_lst[i - 1]
-        #         x_lst.append(this_x)
-        # k_lst = np.asarray(k_lst)
-        # b_lst = np.asarray(b_lst)
-        # x_lst = np.asarray(x_lst)
-        # sig = float(sig)
-        # return k_lst, b_lst, x_lst, sig
+
+# TODO: to implement
+class PiecewiseLogLinearStudentTML(RegressorML):
+
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 n_piece,
+                 width=0.1,
+                 A_eq=None,
+                 b_eq=None,
+                 log_prior=None):
+
+        self.n_piece = n_piece
+        piecewise_linear = generate_piecewise_linear(n_piece)
+        piecewise_linear_jax = generate_piecewise_linear_jax(n_piece)
+
+        def piecewise_loglinear_scatter(x, params):
+
+            sig = params[-1]
+            log10_y_pred = piecewise_linear(np.log10(x),
+                                            *self.parse_piecewise_params(
+                                                params[:-1]),
+                                            width=width)
+            return np.power(
+                10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
+
+        @jit
+        def piecewise_loglinear_jax(x, params):
+            '''
+            params: (b0, x0) + k_lst + dx_lst
+            '''
+            log10_y_pred = piecewise_linear_jax(
+                jnp.log10(jnp.abs(x)),
+                *self.parse_piecewise_params(params),
+                width=width)
+            return log10_y_pred
+
+        @jit
+        def lognorm(x, y, params):
+            # print(len(params))
+            return jnp.where(
+                (x < 0) | (y < 0), 0,
+                norm.pdf(jnp.log10(jnp.abs(y)),
+                         loc=piecewise_loglinear_jax(x, params[:-1]),
+                         scale=params[-1]))
+
+        if log_prior is None:
+
+            def log_prior(params):
+                sig = params[-1]
+                _, _, _, dx_lst = self.parse_piecewise_params(params[:-1])
+                is_bad = jnp.any(dx_lst <= 0) | (sig <= 0)
+                return jnp.where(is_bad, -jnp.inf, 0)
+
+        super().__init__(xflow,
+                         yflow,
+                         p_cond=lognorm,
+                         step_constructor=piecewise_linear_step_factory(
+                             n_piece, A_eq=A_eq, b_eq=b_eq),
+                         get_w_add=get_w_add_lognorm,
+                         func_x2y=piecewise_loglinear_scatter,
+                         log_prior=log_prior)
+
+    def parse_piecewise_params(self, params):
+        return _parse_piecewise_params(self.n_piece, params)
+
+    def to_each_piece_params(self, params):
+        return _to_each_piece_params(self.n_piece, params)
 
 
-class RegressorLogLinearStudentTML(RegressorML):
+class LogLinearStudentTML(RegressorML):
     # https://arxiv.org/abs/2411.02380
 
     def __init__(self, xflow, yflow, log_prior=None):
@@ -682,7 +733,7 @@ class RegressorLogLinearStudentTML(RegressorML):
             log_prior=log_prior)
 
 
-class RegressorLinearML(RegressorML):
+class LinearML(RegressorML):
 
     def __init__(self, xflow, yflow):
 
@@ -842,7 +893,7 @@ class RegressorKS(RegressorBase):
         return params_mean, params_std, res_arr
 
 
-class RegressorLogLinearKS(RegressorKS):
+class LogLinearKS(RegressorKS):
 
     def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
 
@@ -875,7 +926,7 @@ class RegressorLogLinearKS(RegressorKS):
         return gen_new_grid_refine_kwargs
 
 
-class RegressorLinearKS(RegressorKS):
+class LinearKS(RegressorKS):
 
     def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
 
