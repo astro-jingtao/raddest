@@ -91,7 +91,7 @@ def gen_new_grid_mean_std(res_arr,
         d_par_min = [d_par_min] * n_par
 
     if range_par is None:
-        range_par = [[-np.inf, np.inf] * n_par]
+        range_par = [[-np.inf, np.inf] for _ in range(n_par)]
 
     new_list = []
 
@@ -111,7 +111,6 @@ def gen_new_grid_quantile(res_arr,
                           q_up=0.84,
                           d_par_min=0.2,
                           range_par=None):
-    
     # if n, n_sigma, d_par_min are integers/floats, we convert them to lists of integers
     if isinstance(n, (int, float)):
         n = [n] * n_par

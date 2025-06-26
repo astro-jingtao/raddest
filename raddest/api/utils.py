@@ -1,6 +1,7 @@
 import numpy as np
 from raddest.reg.constructor import parse_piecewise_params
 
+
 def to_each_piece_params(n_piece, params):
     sig = params[-1]
     b0, x0, k_lst, dx_lst = parse_piecewise_params(n_piece, params[:-1])
@@ -18,3 +19,11 @@ def to_each_piece_params(n_piece, params):
     x_lst = np.asarray(x_lst)
     sig = float(sig)
     return k_lst, b_lst, x_lst, sig
+
+
+def to_each_piece_params_studentT(n_piece, params):
+    df = params[-2]
+    k_lst, b_lst, x_lst, sig = to_each_piece_params(n_piece,
+                                                    params[:-2] + [params[-1]])
+    df = float(df)
+    return k_lst, b_lst, x_lst, sig, df

@@ -7,11 +7,14 @@ import numpy as np
 from jax import jit, vmap
 from jax.scipy.stats import norm
 from jax.scipy.stats import t as student_t
+from scipy.stats import t as student_t_scipy
 from ndtest.ksnd import ks2d2s
 from scipy.stats import qmc
 
 from raddest.api.utils import \
     to_each_piece_params as _to_each_piece_params
+from raddest.api.utils import \
+    to_each_piece_params_studentT as _to_each_piece_params_studentT
 from raddest.grid_search import (gen_new_grid_mean_std, gen_new_grid_quantile,
                                  get_weighted_res, grid_search, zoom_in_grid)
 from raddest.reg.constructor import (
@@ -557,7 +560,7 @@ class PiecewiseLogLinearML(RegressorML):
                  xflow,
                  yflow,
                  n_piece,
-                 width=0.1,
+                 width=0.05,
                  A_eq=None,
                  b_eq=None,
                  log_prior=None):
@@ -618,6 +621,7 @@ class PiecewiseLogLinearML(RegressorML):
 
     def to_each_piece_params(self, params):
         return _to_each_piece_params(self.n_piece, params)
+
 
 # TODO: to implement
 class PiecewiseLogLinearStudentTML(RegressorML):
@@ -626,7 +630,7 @@ class PiecewiseLogLinearStudentTML(RegressorML):
                  xflow,
                  yflow,
                  n_piece,
-                 width=0.1,
+                 width=0.05,
                  A_eq=None,
                  b_eq=None,
                  log_prior=None):
@@ -637,13 +641,14 @@ class PiecewiseLogLinearStudentTML(RegressorML):
 
         def piecewise_loglinear_scatter(x, params):
 
-            sig = params[-1]
+            df, sig = params[-2:]
             log10_y_pred = piecewise_linear(np.log10(x),
                                             *self.parse_piecewise_params(
-                                                params[:-1]),
+                                                params[:-2]),
                                             width=width)
             return np.power(
-                10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
+                10, log10_y_pred +
+                student_t_scipy.rvs(df, scale=sig, size=x.shape))
 
         @jit
         def piecewise_loglinear_jax(x, params):
@@ -657,36 +662,39 @@ class PiecewiseLogLinearStudentTML(RegressorML):
             return log10_y_pred
 
         @jit
-        def lognorm(x, y, params):
+        def logstudent_t(x, y, params):
             # print(len(params))
             return jnp.where(
                 (x < 0) | (y < 0), 0,
-                norm.pdf(jnp.log10(jnp.abs(y)),
-                         loc=piecewise_loglinear_jax(x, params[:-1]),
-                         scale=params[-1]))
+                student_t.pdf(jnp.log10(jnp.abs(y)),
+                              params[-2],
+                              loc=piecewise_loglinear_jax(x, params[:-2]),
+                              scale=params[-1]))
 
         if log_prior is None:
 
             def log_prior(params):
-                sig = params[-1]
-                _, _, _, dx_lst = self.parse_piecewise_params(params[:-1])
-                is_bad = jnp.any(dx_lst <= 0) | (sig <= 0)
+                df, sig = params[-2:]
+                _, _, _, dx_lst = self.parse_piecewise_params(params[:-2])
+                is_bad = jnp.any(dx_lst <= 0) | (sig <= 0) | (df <= 0)
                 return jnp.where(is_bad, -jnp.inf, 0)
 
-        super().__init__(xflow,
-                         yflow,
-                         p_cond=lognorm,
-                         step_constructor=piecewise_linear_step_factory(
-                             n_piece, A_eq=A_eq, b_eq=b_eq),
-                         get_w_add=get_w_add_lognorm,
-                         func_x2y=piecewise_loglinear_scatter,
-                         log_prior=log_prior)
+        super().__init__(
+            xflow,
+            yflow,
+            p_cond=logstudent_t,
+            step_constructor=piecewise_linear_studentT_step_factory(n_piece,
+                                                                    A_eq=A_eq,
+                                                                    b_eq=b_eq),
+            get_w_add=get_w_add_lognorm,
+            func_x2y=piecewise_loglinear_scatter,
+            log_prior=log_prior)
 
     def parse_piecewise_params(self, params):
         return _parse_piecewise_params(self.n_piece, params)
 
     def to_each_piece_params(self, params):
-        return _to_each_piece_params(self.n_piece, params)
+        return _to_each_piece_params_studentT(self.n_piece, params)
 
 
 class LogLinearStudentTML(RegressorML):

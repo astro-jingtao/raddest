@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="raddest",
-    version="0.8.0",
+    version="0.9.0",
     author="Tao Jing",
     author_email="jingt20@mails.tsinghua.edu.cn",
     description=
