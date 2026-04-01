@@ -2,6 +2,13 @@
 
 ## [unreleased]
 
+### Add
+
+- Deal with jax array in `shrink_data`
+
+### Changed
+
+- Fix import error in example notebook 
 
 ## 0.9.0 - 2025-06-26
 

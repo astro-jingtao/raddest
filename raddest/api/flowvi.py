@@ -97,7 +97,7 @@ class FlowVI:
             guess_verbose=False,
             derive_uv_bounds=False,
             skip_fitting_if_init_good=False,
-            init_good_theshold=0.05,
+            init_good_threshold=0.05,
             init_check_N=10000,
             check_per_step=10,
             early_stop=True,
@@ -105,6 +105,77 @@ class FlowVI:
             stuck_frac=0.05,
             re_estimate_transer_params=False,
             verbose=False):
+        """
+        Fit the normalizing flow model of data and uncertainty joint distribution (x, x_err),
+        by maximizing the likelihood of observed data and uncertainty joint distribution (x_obs, x_err).
+
+        It supports optional transfer functions, automatic initialization, early stopping, and post-estimation of transfer parameters. Training is performed using a two-stage procedure consisting of a pre-training phase followed by full optimization.
+
+        Parameters
+        ----------
+        x_obs : array_like
+            Observed data values.
+        x_err : array_like
+            Measurement uncertainties associated with ``x_obs``.
+        optimizer : optax.GradientTransformation, default=optax.adam(1e-3)
+            Optimizer used to train the model.
+        n_pre : int, default=100
+            Number of pre-training steps.
+        n_train : int, default=500
+            Number of training steps after pre-training.
+        n_node : int, default=21
+            Number of nodes used in numerical integration or quadrature.
+        int_method : {'ghq', 'qmc', 'inter_grid'} default='ghq'
+            Integration method used during training.
+        x_min : float or None, optional
+            Minimum allowed x value. If None, ``self.x_min`` is used.
+        x_max : float or None, optional
+            Maximum allowed x value. If None, ``self.x_max`` is used.
+        x_err_min : float or None, optional
+            Minimum allowed x error. If None, ``self.x_err_min`` is used.
+        x_err_max : float or None, optional
+            Maximum allowed x error. If None, ``self.x_err_max`` is used.
+        guess_method : {'gg', 'auto', 'poisson', 'SNR', 'none'}, default='gg'
+            Method used to generate `x_guess` used for pre-training.
+        guess_recalibrate : bool or None, optional
+            Whether to recalibrate `x_guess`.
+        guess_verbose : bool, default=False
+            If True, print diagnostic information during generating `x_guess`.
+        derive_uv_bounds : bool, default=False
+            If True, derive bounds in the latent (u, v) space automatically.
+        skip_fitting_if_init_good : bool, default=False
+            If True, skip training when the initial pre-trained model already provides
+            a sufficiently good fit.
+        init_good_threshold : float, default=0.05
+            Threshold used to decide whether the initial pre-trained model is good enough to skip training.
+        init_check_N : int, default=10000
+            Number of samples used to assess the quality of the initial pre-trained model.
+        check_per_step : int, default=10
+            Frequency (in training steps) at which convergence or stopping
+            criteria are checked.
+        early_stop : bool, default=True
+            If True, enable early stopping based on training progress.
+        max_stuck : int, default=5
+            Maximum number of consecutive checks with insufficient improvement
+            before stopping.
+        stuck_frac : float, default=0.05
+            Fractional improvement threshold used to detect stalled training.
+        re_estimate_transer_params : bool, default=False
+            If True, re-estimate the parameters of the transfer function after
+            training, if a transfer function is used.
+        verbose : bool, default=False
+            If True, print progress information during training.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        After successful execution, the trained flow model is stored in
+        ``self.flow``, the final loss value in ``self.loss``, and the attribute
+        ``self.fitted`` is set to True.
+        """
 
         if x_min is None:
             x_min = self.x_min
@@ -151,7 +222,7 @@ class FlowVI:
             guess_verbose=guess_verbose,
             derive_uv_bounds=derive_uv_bounds,
             skip_fitting_if_init_good=skip_fitting_if_init_good,
-            init_good_theshold=init_good_theshold,
+            init_good_theshold=init_good_threshold,
             init_check_N=init_check_N)
 
         self.fitted = True

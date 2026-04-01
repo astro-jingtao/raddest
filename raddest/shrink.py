@@ -158,6 +158,14 @@ def shrink_data(x_obs,
 
         return x_sh_lst[best_idx]
 
+    is_x_jax_arr = isinstance(x_obs, jnp.ndarray)
+    is_x_err_jax_arr = isinstance(x_err, jnp.ndarray)
+
+    if is_x_jax_arr:
+        x_obs = np.array(x_obs)
+    if is_x_err_jax_arr:
+        x_err = np.array(x_err)
+
     if method == 'gg':
         x_shrink = shrink_gg(x_obs, x_err)
         x_err_shrink = x_err
@@ -174,6 +182,12 @@ def shrink_data(x_obs,
     # None and False are equivalent
     if to_recalibrate:
         x_shrink = recalibrate_x(x_shrink, x_obs)
+
+
+    if is_x_jax_arr:
+        x_shrink = jnp.array(x_shrink)
+    if is_x_err_jax_arr:
+        x_err_shrink = jnp.array(x_err_shrink)
 
     return x_shrink, x_err_shrink
 

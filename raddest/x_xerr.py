@@ -158,7 +158,9 @@ def construct_x_xerr_w(x_obs,
     elif int_method == 'inter_grid':
         _x_ext, _x_err_ext, w = get_ext_w_inter_grid(n_node, x_obs, x_err)
     else:
-        raise ValueError(f"Invalid integration method: {int_method}")
+        raise ValueError(
+            f"Invalid integration method: {int_method}. Only 'ghq', 'qmc', and 'inter_grid' are supported."
+        )
 
     if transfer is None:
         u_ext = _x_ext

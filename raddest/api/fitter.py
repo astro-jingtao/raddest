@@ -835,6 +835,65 @@ class RegressorKS(RegressorBase):
             refine=True,
             gen_new_grid_kwargs=None,
             gen_new_grid_refine_kwargs=None):
+        """
+        Fit model parameters to observed data using grid-based search and refinement.
+
+        This method performs a grid search over the specified parameter space to fit
+        the model to observed ``(x_obs, y_obs)`` data. It generates synthetic data
+        using the configured flows and parameters, compares the synthetic and observed 
+        distributions via a KS-based metric, and iteratively zooms into regions of 
+        low distribution difference. An optional refinement step performs a final dense
+        grid search around the best-fit region obtained from the zoom-in procedure.
+
+        Parameters
+        ----------
+        x_obs : array_like
+            Observed x data.
+        y_obs : array_like
+            Observed y data.
+        params_list : list
+            List defining the initial parameter grid. Each element specifies the
+            grid for one model parameter.
+        N : int, default=1000
+            Number of samples to generate for the synthetic dataset at each grid
+            evaluation.
+        x_range : array_like or None, optional
+            Range of error-free x values to consider. If None, an internal default is used.
+        x_err_range : array_like or None, optional
+            Range of x observational errors. If None, an internal default is used.
+        y_range : array_like or None, optional
+            Range of error-free y values to consider. If None, an internal default is used.
+        y_err_range : array_like or None, optional
+            Range of y observational errors. If None, an internal default is used.
+        num_process : int, default=10
+            Number of parallel processes used during grid evaluation.
+        max_i : int, default=10
+            Maximum number of zoom-in iterations for the adaptive grid search.
+        rtol : float, default=1e-3
+            Relative tolerance for convergence in the zoom-in grid search.
+        atol : float, default=1e-3
+            Absolute tolerance for convergence in the zoom-in grid search.
+        verbose : bool, default=False
+            If True, print progress information during fitting.
+        refine : bool, default=True
+            If True, perform an additional refined grid search around the best-fit
+            region obtained from the zoom-in procedure.
+        gen_new_grid_kwargs : dict or None, optional
+            Keyword arguments passed to ``gen_new_grid`` during the initial zoom-in
+            grid generation.
+        gen_new_grid_refine_kwargs : dict or None, optional
+            Keyword arguments passed to ``gen_new_grid`` during the refinement step.
+
+        Returns
+        -------
+        params_mean : ndarray
+            Weighted mean of the fitted parameters.
+        params_std : ndarray
+            Weighted standard deviation of the fitted parameters.
+        res_arr : ndarray
+            Array containing the grid search results. Each row corresponds to one
+            grid point, with parameter values and their associated KS statistic and p-value.
+        """
 
         gen_new_grid_kwargs = self._set_gen_new_grid_kwargs(
             gen_new_grid_kwargs)
