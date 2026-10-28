@@ -3,15 +3,14 @@ import shutil
 from typing import Union
 
 import jax.numpy as jnp
-import numpy as np
 import joblib
-import optax
 from ndtest.ksnd import ks2d2s
+import numpy as np
+import optax
 from pzflow import Flow
 
 from ..transfer import Transfer
-from ..x_xerr import (construct_nf_fit_func, construct_x_xerr_w,
-                      gen_xobs_trans, nf_fit_general)
+from ..x_xerr import construct_nf_fit_func, construct_x_xerr_w, gen_xobs_trans, nf_fit_general
 
 
 class FlowVI:
@@ -193,9 +192,8 @@ class FlowVI:
                     raise ValueError(
                         "The transfer function does not have a parameter estimator."
                     )
-                else:
-                    self.transfer_params = self.transfer.params_estimator(
-                        x_obs, x_err)
+                self.transfer_params = self.transfer.params_estimator(
+                    x_obs, x_err)
 
         self.flow, self.loss, _ = nf_fit_general(
             x_obs,
@@ -338,7 +336,7 @@ class FlowVI:
         if M is None:
             M = N_data
 
-        if M > N_data:
+        if N_data < M:
             print(
                 "Warning: M is larger than the number of data points, M is set to the number of data points."
             )

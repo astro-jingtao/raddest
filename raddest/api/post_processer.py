@@ -1,9 +1,10 @@
 from copy import deepcopy
 
-import numpy as np
 from ndtest.ksnd import ks2d2s
+import numpy as np
+
 from raddest.api.flowvi import FlowVI
-from raddest.transfer import combine_transfers, XShift
+from raddest.transfer import XShift, combine_transfers
 
 
 def post_shift(x_obs, x_err, flow_vi: FlowVI, N=10000, shift_method='median'):
@@ -30,9 +31,9 @@ def get_shift(x_obs, x_obs_gen, method='median'):
 
     if method == 'median':
         return np.median(x_obs_gen) - np.median(x_obs)
-    elif method == 'mean':
+    if method == 'mean':
         return np.mean(x_obs_gen) - np.mean(x_obs)
-    elif method == 'histgram':
+    if method == 'histgram':
         _range = np.percentile(x_obs, [25, 75])
 
         N_gen, edges_gen = np.histogram(x_obs_gen, bins=101, range=_range)

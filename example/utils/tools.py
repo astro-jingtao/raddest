@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def flag_bad(x):
     """
     It returns True if the input is NaN or Inf, and False otherwise

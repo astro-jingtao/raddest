@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from functools import wraps
 
-import jax.numpy as jnp
-import numpy as np
 from jax import jit
+import jax.numpy as jnp
 from jax.scipy.stats import norm
+import numpy as np
 from numpy.polynomial.hermite import hermgauss
 from scipy.stats.qmc import MultivariateNormalQMC
 
-from .transfer import Transfer
 from .GaussHermiteQuadrature import GaussHermiteQuadrature
+from .transfer import Transfer
 
 
 def get_wy_1d(n):

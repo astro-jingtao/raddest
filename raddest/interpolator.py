@@ -1,5 +1,4 @@
-from interpax import PPoly as _PPoly
-from interpax import PchipInterpolator as _PchipInterpolator
+from interpax import PchipInterpolator as _PchipInterpolator, PPoly as _PPoly
 
 
 class MyPchipInterpolator:

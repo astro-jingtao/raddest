@@ -1,10 +1,10 @@
 from typing import Union
 
-import numpy as np
 from ndtest.ksnd import ks2d2s
+import numpy as np
 from scipy.stats import t as student_t
 
-from ..transfer import Transfer, NegLogPlus
+from ..transfer import NegLogPlus, Transfer
 from ..x_xerr import gen_xobs_trans
 from .constructor import construct_generator_cond
 
@@ -92,8 +92,7 @@ def loglinear_x2y(x, x_obs, y_kdt, y_err_kdt, k, b, sig, return_more=False):
 
     if return_more:
         return x_obs, y_obs_pred, y_err_pred, y_pred
-    else:
-        return x_obs, y_obs_pred
+    return x_obs, y_obs_pred
 
 
 def gen_xy_obs_loglinear(flowx,

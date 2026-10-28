@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
-from raddest.reg.constructor import flat_piecewise_params, parse_piecewise_params
+
 from raddest.api.utils import to_each_piece_params
+from raddest.reg.constructor import flat_piecewise_params, parse_piecewise_params
 
 
 class TestPiecewiseParams:

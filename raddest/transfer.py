@@ -1,8 +1,8 @@
 from functools import partial
 
+from jax import jit
 import jax.numpy as jnp
 import joblib
-from jax import jit
 
 
 class Transfer:
@@ -316,7 +316,7 @@ def combine_transfers_binary(transfer1, transfer2):
 
     if transfer1 is None:
         return transfer2
-    elif transfer2 is None:
+    if transfer2 is None:
         return transfer1
 
     n_1 = transfer1.n_params
@@ -363,8 +363,7 @@ def combine_transfers_binary(transfer1, transfer2):
 def combine_transfers(*args):
     if len(args) == 1:
         return args[0]
-    else:
-        return combine_transfers_binary(args[0], combine_transfers(*args[1:]))
+    return combine_transfers_binary(args[0], combine_transfers(*args[1:]))
 
 # functions
 

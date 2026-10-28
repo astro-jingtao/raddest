@@ -1,7 +1,7 @@
 import itertools
 
-import numpy as np
 from joblib import Parallel, delayed
+import numpy as np
 from statsmodels.stats.weightstats import DescrStatsW
 
 
@@ -207,13 +207,12 @@ def quantile(x, q, weights=None, N_min=2):
     # But now we use the following method
     if weights is None:
         return np.percentile(x, list(100.0 * q))
-    else:
-        weights = np.atleast_1d(weights).astype(float)
-        if len(x) != len(weights):
-            raise ValueError("Dimension mismatch: len(weights) != len(x)")
-        idx = np.argsort(x)
-        sw = weights[idx]
-        cdf = np.cumsum(sw)[:-1]
-        cdf /= cdf[-1]
-        cdf = np.append(0, cdf)
-        return np.interp(q, cdf, x[idx]).tolist()
+    weights = np.atleast_1d(weights).astype(float)
+    if len(x) != len(weights):
+        raise ValueError("Dimension mismatch: len(weights) != len(x)")
+    idx = np.argsort(x)
+    sw = weights[idx]
+    cdf = np.cumsum(sw)[:-1]
+    cdf /= cdf[-1]
+    cdf = np.append(0, cdf)
+    return np.interp(q, cdf, x[idx]).tolist()

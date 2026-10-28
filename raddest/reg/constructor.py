@@ -1,8 +1,8 @@
-import jax.numpy as jnp
-import numpy as np
 from jax import grad, jacrev, jit
+import jax.numpy as jnp
 from jax.scipy.stats import norm
 from ndtest.ksnd import ks2d2s
+import numpy as np
 from scipy.spatial import KDTree
 
 
@@ -34,8 +34,7 @@ def construct_trainer(log_likelihood, step):
                     if verbose:
                         print(f'converged, so stop with {i} iterations')
                     break
-                else:
-                    params_old = params
+                params_old = params
         return params
 
     return trainer

@@ -5,11 +5,11 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '1'
 
 import jax.numpy as jnp
+from jax.scipy.stats import norm
 import numpy as np
 import pandas as pd
 import pytest
 from pzflow import Flow
-from jax.scipy.stats import norm
 
 from raddest.tools import get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_p_flow
 

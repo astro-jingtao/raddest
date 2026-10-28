@@ -1,10 +1,18 @@
 from typing import Union
 
 import jax.numpy as jnp
-import numpy as np
 from jax.scipy.stats import gaussian_kde
+import numpy as np
 
-from ..tools import get_ext_w_2d, get_ext_w_2d_qmc, get_ext_w_2d_grid, get_ext_w_2d_qgrid, get_ext_w_2d_inter_grid, get_p_flow, concat
+from ..tools import (
+    concat,
+    get_ext_w_2d,
+    get_ext_w_2d_grid,
+    get_ext_w_2d_inter_grid,
+    get_ext_w_2d_qgrid,
+    get_ext_w_2d_qmc,
+    get_p_flow,
+)
 from ..transfer import Transfer
 
 

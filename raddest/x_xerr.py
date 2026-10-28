@@ -2,20 +2,19 @@
 
 from typing import Union
 
+from jax import grad, jit
 import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+from ndtest.ksnd import ks2d2s
 import numpy as np
 import optax
 import pandas as pd
-from jax import grad, jit
-from jax.scipy.special import logsumexp
 from pzflow import Flow
-from pzflow.bijectors import (Chain, RollingSplineCoupling, ShiftBounds)
-from ndtest.ksnd import ks2d2s
+from pzflow.bijectors import Chain, RollingSplineCoupling, ShiftBounds
 
-from .tools import get_ext_w, get_ext_w_qmc, get_ext_w_inter_grid, transform_data
 from .shrink import shrink_data
-from .transfer import (LogRotation, NegLogPlus, NegLogPlusXShift, Transfer,
-                       XShiftNegLogPlus)
+from .tools import get_ext_w, get_ext_w_inter_grid, get_ext_w_qmc, transform_data
+from .transfer import LogRotation, NegLogPlus, NegLogPlusXShift, Transfer, XShiftNegLogPlus
 
 
 def nf_fit_frame(u_ext,
@@ -75,11 +74,10 @@ def find_uv_bounds(_bijector_info):
             if result is not None:
                 return result
         return None  # If do not find bounds in chain，return None
-    elif _bijector_info[0] == 'ShiftBounds':
+    if _bijector_info[0] == 'ShiftBounds':
         return (_bijector_info[1][0][0], _bijector_info[1][1][0],
                 _bijector_info[1][0][1], _bijector_info[1][1][1])
-    else:
-        return None  # If not 'Chain' or 'ShiftBounds'，return None
+    return None  # If not 'Chain' or 'ShiftBounds'，return None
 
 
 def construct_nf_fit_func(optimizer, flow):

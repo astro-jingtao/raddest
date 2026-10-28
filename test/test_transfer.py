@@ -4,8 +4,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '1'
 
 import numpy as np
-from raddest.transfer import (LogRotation, NegLogPlus, Transfer,
-                              combine_transfers)
+
+from raddest.transfer import LogRotation, NegLogPlus, Transfer, combine_transfers
 
 
 class TestNegLogPlus:

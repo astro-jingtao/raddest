@@ -1,6 +1,6 @@
 import numpy as np
-import statsmodels.api as sm
 from scipy.odr import ODR, Data, Model
+import statsmodels.api as sm
 
 from .tools import all_asarray, remove_bad
 

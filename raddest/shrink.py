@@ -1,8 +1,8 @@
-import jax.numpy as jnp
 from jax import jit
+import jax.numpy as jnp
+from ndtest.ksnd import ks2d2s
 import numpy as np
 import statsmodels.api as sm
-from ndtest.ksnd import ks2d2s
 
 
 @jit
