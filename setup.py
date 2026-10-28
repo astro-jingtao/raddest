@@ -11,5 +11,5 @@ setup(
     python_requires='>=3.9',
     install_requires=[
         'numpy', 'joblib', 'pzflow', 'optax', 'interpax', 'scipy',
-        'statsmodels'
+        'statsmodels', 'emcee'
     ])

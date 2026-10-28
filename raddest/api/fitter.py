@@ -2,11 +2,13 @@ from functools import partial
 from typing import Tuple
 
 import emcee
+import jax
 from jax import jit, vmap
 import jax.numpy as jnp
 from jax.scipy.stats import norm, t as student_t
 from ndtest.ksnd import ks2d2s
 import numpy as np
+import optax
 from scipy.stats import qmc, t as student_t_scipy
 
 from raddest.api.utils import (
@@ -31,6 +33,11 @@ from raddest.reg.constructor import (
     construct_trainer,
     parse_piecewise_params as _parse_piecewise_params,
     piecewise_linear_step_factory,
+)
+from raddest.reg.energy import (
+    construct_energy_compare,
+    construct_energy_loss,
+    energy_test,
 )
 from raddest.reg.func import generate_piecewise_linear, saturated_linear_smooth
 from raddest.reg.func_jax import generate_piecewise_linear_jax, saturated_linear_smooth_jax
@@ -245,6 +252,99 @@ class RegressorBase:
             p_lst.append(p)
 
         return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
+
+    def energy_test(self,
+                    params,
+                    x_obs,
+                    y_obs,
+                    N=10000,
+                    M=None,
+                    K=1,
+                    permutations=200,
+                    x_range=None,
+                    x_err_range=None,
+                    y_range=None,
+                    y_err_range=None):
+        """
+        Run the energy two-sample test with K iterations between synthetic data
+        generated from `params` and the observed data. N data points are
+        generated, and M observed data points are selected for each iteration.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters used for the data generator.
+        x_obs : array_like
+            Observed x values.
+        y_obs : array_like
+            Observed y values.
+        N : int, optional
+            Number of points to generate for the test. Default is 10000.
+        M : int, optional
+            Number of data points to select for the test. If None, M is set to the number of x_obs. Default is None.
+        K : int, optional
+            Number of iterations for the test. Default is 1.
+        permutations : int, optional
+            Number of permutations per iteration; the p-value resolution is
+            1 / (1 + permutations). Default is 200.
+        x_range : tuple of (float, float), optional
+            Range (min, max) for generating x values. Default is None.
+            If None, the range is set from the flows (see `sample`).
+        x_err_range : tuple of (float, float), optional
+            Range (min, max) for generating x errors. Default is None.
+        y_range : tuple of (float, float), optional
+            Range (min, max) for generating y values. Default is None.
+        y_err_range : tuple of (float, float), optional
+            Range (min, max) for generating y errors. Default is None.
+
+        Returns
+        --------
+        E or E_lst : float or list of float
+            Single energy distance if K=1, otherwise list of energy distances.
+        p or p_lst : float or list of float
+            Single p value if K=1, otherwise list of p values.
+        Notes
+        ------
+        If M is larger than the number of data points, M is set to the number of data points, and a warning is issued.
+        Each iteration costs O((N + M)^2 * permutations); reduce N or
+        permutations for large datasets.
+        """
+
+        self._check_generator_cond()
+
+        N_data = x_obs.size
+
+        if M is None:
+            M = N_data
+
+        if N_data < M:
+            print(
+                "Warning: M is larger than the number of data points, M is set to the number of data points."
+            )
+            M = N_data
+
+        obs = np.stack([x_obs, y_obs], axis=1)
+
+        E_lst, p_lst = [], []
+
+        for _ in range(K):
+
+            x_obs_gen, y_obs_gen, _, _, _, _ = self.sample(
+                params,
+                N=N,
+                x_range=x_range,
+                x_err_range=x_err_range,
+                y_range=y_range,
+                y_err_range=y_err_range)
+
+            selected = np.random.choice(N_data, M, replace=False)
+            gen = np.stack([x_obs_gen, y_obs_gen], axis=1)
+            E, p = energy_test(gen, obs[selected], permutations=permutations)
+
+            E_lst.append(E)
+            p_lst.append(p)
+
+        return (E_lst[0], p_lst[0]) if K == 1 else (E_lst, p_lst)
 
 
 # TODO: cache x_ext, y_ext, w ?
@@ -784,6 +884,17 @@ class LinearML(RegressorML):
 
 
 class RegressorKS(RegressorBase):
+    """Grid-search regressor comparing synthetic and observed distributions.
+
+    The comparison statistic used to weight the grid is decided by
+    ``compare_constructor``, which is called as
+    ``compare_constructor(generator_cond, x_gen, x_obs_gen, y_kdt, y_err_kdt,
+    x_obs, y_obs)`` and must return ``compare(*params) -> (stat, p_value)``.
+    Subclasses replace it to fit against a different distribution distance
+    (e.g. the energy test); the default is the 2D two-sample KS test.
+    """
+
+    compare_constructor = staticmethod(construct_ks_compare)
 
     def __init__(self,
                  xflow,
@@ -932,9 +1043,10 @@ class RegressorKS(RegressorBase):
             n=N,
             return_numpy=True)
 
-        # Use construct_ks_compare but not define ks_compare here, or each process in zoom_in_grid will try to import jax thus lead to OOM.
-        compare = construct_ks_compare(self.generator_cond, x_gen, x_obs_gen,
-                                       y_kdt, y_err_kdt, x_obs, y_obs)
+        # Build the compare closure here, not as a module-level jax-using function:
+        # each process in zoom_in_grid must not import jax or it will OOM.
+        compare = self.compare_constructor(self.generator_cond, x_gen, x_obs_gen,
+                                           y_kdt, y_err_kdt, x_obs, y_obs)
 
         w_index = len(params_list) + 1
 
@@ -952,8 +1064,9 @@ class RegressorKS(RegressorBase):
                                atol=atol,
                                verbose=verbose)
 
+        n_par = len(params_list)
+
         if refine:
-            n_par = len(params_list)
             params_list_refine = self.gen_new_grid(
                 res_arr,
                 n_par=n_par,
@@ -1035,3 +1148,186 @@ class LinearKS(RegressorKS):
                                                        [0, np.inf]]
 
         return gen_new_grid_refine_kwargs
+
+
+class RegressorEnergyGrad(RegressorBase):
+    """Fit by minimizing the energy distance with gradient descent.
+
+    The synthetic sample is generated differentiably from the parameters
+    (reparameterized fixed noise) and the energy distance to the observed
+    sample is minimized with an optax optimizer; see
+    `raddest.reg.energy.construct_energy_loss` for the exact loss form.
+    """
+
+    def __init__(self, xflow, yflow, *, func_x2y, func_x2y_jax):
+
+        super().__init__(xflow, yflow, func_x2y=func_x2y)
+
+        self.func_x2y_jax = func_x2y_jax
+
+    def fit(self,
+            x_obs,
+            y_obs,
+            params_0,
+            *,
+            N=1000,
+            lr=1e-2,
+            n_step=10000,
+            atol=1e-4,
+            rtol=1e-4,
+            check_per_step=100,
+            seed=0,
+            optimizer=None,
+            verbose=False,
+            x_range=None,
+            x_err_range=None,
+            y_range=None,
+            y_err_range=None):
+        """
+        Fit model parameters by gradient descent on the energy distance.
+
+        Parameters
+        ----------
+        x_obs : array_like
+            Observed x data.
+        y_obs : array_like
+            Observed y data.
+        params_0 : array_like
+            Initial parameters.
+        N : int, optional
+            Number of synthetic samples generated once and reused (with
+            fixed noise) throughout the optimization. Default is 1000.
+        lr : float, optional
+            Learning rate of the default adam optimizer. Default is 1e-2.
+        n_step : int, optional
+            Maximum number of optimization steps. Default is 10000.
+        atol : float, optional
+            Absolute tolerance of the convergence check on the parameters.
+            Default is 1e-4.
+        rtol : float, optional
+            Relative tolerance of the convergence check on the parameters.
+            Default is 1e-4.
+        check_per_step : int, optional
+            The convergence check runs every this many steps. Default is 100.
+        seed : int, optional
+            Seed of the fixed noise draws (scatter and observational).
+            Default is 0.
+        optimizer : optax.GradientTransformation or None, optional
+            Optimizer to use instead of the default `optax.adam(lr)`.
+            Default is None.
+        verbose : bool, optional
+            If True, print the loss and parameters at every check.
+            Default is False.
+        x_range : array_like or None, optional
+            Range of error-free x values to consider. If None, an internal default is used.
+        x_err_range : array_like or None, optional
+            Range of x observational errors. If None, an internal default is used.
+        y_range : array_like or None, optional
+            Range of error-free y values to consider. If None, an internal default is used.
+        y_err_range : array_like or None, optional
+            Range of y observational errors. If None, an internal default is used.
+
+        Returns
+        -------
+        params : ndarray
+            Fitted parameters.
+        loss_history : ndarray
+            Loss values recorded at every convergence check.
+        """
+
+        x_obs = np.asarray(x_obs)
+        y_obs = np.asarray(y_obs)
+
+        x_range, x_err_range, y_range, y_err_range = self._set_range(
+            x_range, x_err_range, y_range, y_err_range)
+
+        x_gen, _, x_obs_gen, y_kdt, y_err_kdt = gen_xy_obs_prepare(
+            self.xflow.flow,
+            self.yflow.flow,
+            x_range,
+            x_err_range,
+            y_range,
+            y_err_range,
+            x_transfer=self.xflow.transfer,
+            x_transfer_params=self.xflow.transfer_params,
+            y_transfer=self.yflow.transfer,
+            y_transfer_params=self.yflow.transfer_params,
+            n=N,
+            return_numpy=True)
+
+        loss = construct_energy_loss(self.func_x2y_jax,
+                                     x_obs,
+                                     y_obs,
+                                     x_gen,
+                                     x_obs_gen,
+                                     y_kdt,
+                                     y_err_kdt,
+                                     y_min=y_range[0],
+                                     y_max=y_range[1],
+                                     seed=seed)
+
+        loss_and_grad = jit(jax.value_and_grad(loss))
+
+        params = jnp.asarray(params_0, dtype=jnp.float32)
+        if optimizer is None:
+            optimizer = optax.adam(lr)
+        opt_state = optimizer.init(params)
+
+        loss_history = []
+        params_old = params
+
+        for i in range(n_step):
+            loss_value, grads = loss_and_grad(params)
+            updates, opt_state = optimizer.update(grads, opt_state, params)
+            params = optax.apply_updates(params, updates)
+
+            if i % check_per_step == 0:
+                loss_history.append(float(loss_value))
+                if verbose:
+                    print(i, float(loss_value), np.asarray(params))
+                if (i > 0) and jnp.allclose(params, params_old, atol=atol, rtol=rtol):
+                    if verbose:
+                        print(f'converged, so stop with {i} iterations')
+                    break
+                params_old = params
+
+        return np.asarray(params), np.array(loss_history)
+
+
+class LogLinearEnergyPT(LogLinearKS):
+    """Log-linear regression fitted by grid search on energy-test p-values.
+
+    Same zoom-in grid machinery as `LogLinearKS`, with the 2D two-sample KS
+    compare replaced by the permutation energy test: at each grid point a
+    synthetic sample is generated and its energy distance to the observed
+    sample is converted to a p-value, which weights the grid. Each grid point
+    costs O((N + M)^2 * permutations); reduce N or `permutations` for large
+    datasets.
+    """
+
+    def __init__(self, xflow, yflow, permutations=200, gen_new_grid='mean_std'):
+
+        super().__init__(xflow, yflow, gen_new_grid=gen_new_grid)
+
+        self.compare_constructor = partial(construct_energy_compare,
+                                           permutations=permutations)
+
+
+class LogLinearEnergyGrad(RegressorEnergyGrad):
+    """Log-linear regression fitted by minimizing the energy distance.
+
+    The model is y = 10^(k * log10(x) + b + sig * eps) with eps a fixed
+    unit-normal draw; parameters are (k, b, sig).
+    """
+
+    def __init__(self, xflow, yflow):
+
+        @jit
+        def loglinear_scatter_jax(x, params, eps):
+            return jnp.power(
+                10, params[0] * jnp.log10(jnp.abs(x)) + params[1] + params[2] * eps)
+
+        super().__init__(xflow,
+                         yflow,
+                         func_x2y=loglinear_scatter,
+                         func_x2y_jax=loglinear_scatter_jax)

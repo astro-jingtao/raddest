@@ -40,6 +40,35 @@ You need `corner` to run these examples. If you don't have, install it by
 pip install corner
 ```
 
+### Fitting with the energy distance
+
+Besides the likelihood-based (`LogLinearML` and friends) and KS-grid-based (`LogLinearKS` and friends) methods, the two-sample energy distance can be used as the distribution-distance criterion, with two optimizers.
+
+Grid search weighted by energy-test p-values (each grid point generates a synthetic sample and compares it to the observed one with a permutation test on the energy distance):
+
+```python
+from raddest.api.fitter import LogLinearEnergyPT
+
+regressor = LogLinearEnergyPT(xflow, yflow, permutations=200)
+params_mean, params_std, res_arr = regressor.fit(x_obs, y_obs,
+                                                 params_list=params_list,
+                                                 N=1000)
+```
+
+Gradient descent on the energy distance itself (the synthetic sample is generated differentiably from the parameters, and the energy distance to the observed sample is minimized with adam):
+
+```python
+from raddest.api.fitter import LogLinearEnergyGrad
+import jax.numpy as jnp
+
+regressor = LogLinearEnergyGrad(xflow, yflow)
+params_hat, loss_history = regressor.fit(x_obs, y_obs,
+                                         jnp.asarray([k0, b0, sig0]),
+                                         N=1000)
+```
+
+Both regressors also provide `energy_test(params, x_obs, y_obs)`, which evaluates the fitted model against the observed data with a fresh synthetic sample and returns the energy distance and its p-value. Each energy-test evaluation costs `O((N + M)^2 * permutations)`; reduce `N` or `permutations` for large datasets.
+
 ## Citation
 
 If you use `raddest` in your research, please cite the following paper:
