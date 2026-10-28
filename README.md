@@ -106,6 +106,8 @@ archivePrefix = {arXiv},
 
 The implementation of multivariate Gauss Hermite quadrature is taken from https://github.com/arjungecon/QmUaArNkTet/blob/main/Final%20Assignment/PyCode/Code/ExpectationMultivariateNormal.py.
 
+The energy-distance fitting methods (`raddest.reg.energy` and the `*Energy*` regressors) use the two-sample energy test as implemented in [pted](https://github.com/ConnorStoneAstro/pted) as their reference implementation.
+
 Tao Jing thanks Ce Sui, Kai Wang, Kangning Diao, Yangyao Chen, and Zechang Sun for various fruitful discussions about this project.
 
 Tao Jing thanks Ce Sui, Junkai Zhang, and Qinglin Ma for early test of this package.
