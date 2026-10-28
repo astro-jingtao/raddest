@@ -1,6 +1,4 @@
 import os
-
-
 import shutil
 
 import jax.numpy as jnp

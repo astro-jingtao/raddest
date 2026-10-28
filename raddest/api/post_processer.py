@@ -16,7 +16,7 @@ def post_shift(x_obs, x_err, flow_vi: FlowVI, N=10000, shift_method='median'):
     flow_vi = deepcopy(flow_vi_old)
     x_shift_param = get_shift(x_obs, x_obs_gen_old, method=shift_method)
     transer_new = combine_transfers(XShift(), flow_vi_old.transfer)
-    transfer_params_new = [x_shift_param] + list(flow_vi_old.transfer_params)
+    transfer_params_new = [x_shift_param, *flow_vi_old.transfer_params]
 
     flow_vi.transfer = transer_new
     flow_vi.transfer_params = transfer_params_new
@@ -33,7 +33,7 @@ def get_shift(x_obs, x_obs_gen, method='median'):
         return np.median(x_obs_gen) - np.median(x_obs)
     if method == 'mean':
         return np.mean(x_obs_gen) - np.mean(x_obs)
-    if method == 'histgram':
+    if method == 'histogram':
         _range = np.percentile(x_obs, [25, 75])
 
         N_gen, edges_gen = np.histogram(x_obs_gen, bins=101, range=_range)
@@ -43,3 +43,5 @@ def get_shift(x_obs, x_obs_gen, method='median'):
         cen_obs = (edges_obs[1:] + edges_obs[:-1]) / 2
 
         return cen_gen[np.argmax(N_gen)] - cen_obs[np.argmax(N_obs)]
+
+    raise ValueError(f"Unknown shift method: {method}")

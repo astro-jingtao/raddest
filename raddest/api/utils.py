@@ -25,6 +25,6 @@ def to_each_piece_params(n_piece, params):
 def to_each_piece_params_studentT(n_piece, params):
     df = params[-2]
     k_lst, b_lst, x_lst, sig = to_each_piece_params(n_piece,
-                                                    params[:-2] + [params[-1]])
+                                                    [*params[:-2], params[-1]])
     df = float(df)
     return k_lst, b_lst, x_lst, sig, df

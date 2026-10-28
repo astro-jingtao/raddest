@@ -1,7 +1,6 @@
 
 
 import numpy as np
-import pytest
 
 from raddest.api.flowvi import FlowVI
 from raddest.reg.ks import (

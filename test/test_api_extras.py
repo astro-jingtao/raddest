@@ -44,9 +44,9 @@ class TestGetShift:
         assert get_shift(x_obs, x_gen, 'mean') == pytest.approx(
             float(np.mean(x_gen) - np.mean(x_obs)))
 
-    def test_histgram(self):
+    def test_histogram(self):
         x_obs, x_gen = self.DATA
-        shift = get_shift(x_obs, x_gen, 'histgram')
+        shift = get_shift(x_obs, x_gen, 'histogram')
         assert np.isfinite(shift)
 
 

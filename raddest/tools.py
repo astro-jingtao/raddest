@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from functools import wraps
 
-from jax import jit
 import jax.numpy as jnp
 from jax.scipy.stats import norm
 import numpy as np
@@ -213,17 +212,24 @@ def edge_to_ext_2d(N, x_ext_edge, y_ext_edge):
 
 
 def get_p_flow(flow, x, x_err, batch_size=None):
-    """
-    Calculate probabilities in batches to avoid OOM errors.
+    """Calculate probabilities in batches to avoid OOM errors.
 
-    Parameters:
-    - flow: The flow model.
-    - x: Array of x values.
-    - x_err: Array of x error values.
-    - batch_size: Number of samples to process in each batch. If None, process all at once.
+    Parameters
+    ----------
+    flow : pzflow flow model
+        The flow model whose log-probability is evaluated.
+    x : array_like
+        Array of x values.
+    x_err : array_like
+        Array of x error values.
+    batch_size : int or None, optional
+        Number of samples to process in each batch. If None, process all at
+        once. Default is None.
 
-    Returns:
-    - Array of probabilities.
+    Returns
+    -------
+    array
+        Array of probabilities.
     """
 
     if batch_size is None:
@@ -261,10 +267,7 @@ def grid_and_flat(x_1d, y_1d):
 
 
 def concat(*args, axis=0):
-    to_concat = []
-    for arr in args:
-        if arr.size > 0:
-            to_concat.append(arr)
+    to_concat = [arr for arr in args if arr.size > 0]
     return jnp.concatenate(to_concat, axis=axis)
 
 

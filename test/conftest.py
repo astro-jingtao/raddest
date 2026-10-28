@@ -25,7 +25,7 @@ def cuda_device_from_argv(argv):
 os.environ['CUDA_VISIBLE_DEVICES'] = cuda_device_from_argv(sys.argv)
 os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '1'
 
-import jax.numpy as jnp  # noqa: E402
+import jax.numpy as jnp
 import numpy as np
 import pytest
 

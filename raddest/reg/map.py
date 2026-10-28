@@ -171,11 +171,11 @@ def get_xyw_trans(x_obs,
     uy_sample = samples['x_obs'].to_numpy()
     vy_sample = samples['x_err'].to_numpy()
     if y_transfer is None:
-        y_sample, y_err_sample = uy_sample, vy_sample
+        y_sample = uy_sample
     else:
-        y_sample, y_err_sample = y_transfer.inv(uy_sample,
-                                                vy_sample,
-                                                params=y_transfer_params)
+        y_sample, _ = y_transfer.inv(uy_sample,
+                                     vy_sample,
+                                     params=y_transfer_params)
 
     if ignore_y_err_c_y:
         wy = jnp.ones_like(uy_ext)

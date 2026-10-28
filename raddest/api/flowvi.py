@@ -82,7 +82,7 @@ class FlowVI:
     def fit(self,
             x_obs,
             x_err,
-            optimizer=optax.adam(1e-3),
+            optimizer=None,
             n_pre=100,
             n_train=500,
             n_node=21,
@@ -175,6 +175,11 @@ class FlowVI:
         ``self.flow``, the final loss value in ``self.loss``, and the attribute
         ``self.fitted`` is set to True.
         """
+        if optimizer is None:
+            # built here, not in the default argument: a default-argument
+            # optax.adam(1e-3) is evaluated once at import time and its state
+            # would be silently shared across fit calls
+            optimizer = optax.adam(1e-3)
 
         if x_min is None:
             x_min = self.x_min
@@ -185,15 +190,15 @@ class FlowVI:
         if x_err_max is None:
             x_err_max = self.x_err_max
 
-        # sourcery skip: swap-nested-ifs, merge-nested-ifs
-        if self.transfer is not None:  # transfer used
-            if re_estimate_transer_params or (self.transfer_params is None):
-                if self.transfer.params_estimator is None:
-                    raise ValueError(
-                        "The transfer function does not have a parameter estimator."
-                    )
-                self.transfer_params = self.transfer.params_estimator(
-                    x_obs, x_err)
+        if (self.transfer is not None and
+                (re_estimate_transer_params or self.transfer_params is None)):
+            # transfer used
+            if self.transfer.params_estimator is None:
+                raise ValueError(
+                    "The transfer function does not have a parameter estimator."
+                )
+            self.transfer_params = self.transfer.params_estimator(
+                x_obs, x_err)
 
         self.flow, self.loss, _ = nf_fit_general(
             x_obs,

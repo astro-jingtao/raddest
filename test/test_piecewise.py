@@ -7,21 +7,21 @@ from raddest.reg.constructor import flat_piecewise_params, parse_piecewise_param
 
 class TestPiecewiseParams:
 
-    @pytest.mark.parametrize("params, flatted_params", [
+    @pytest.mark.parametrize(("params", "flatted_params"), [
         ((0, 1, (2, 2), ()), (0, 1, 2, 2)),
         ((1, 2, (3, 4, -2), (5, )), (1, 2, 3, 4, -2, 5)),
     ])
     def test_flat_piecewise_params(self, params, flatted_params):
         assert flat_piecewise_params(*params) == flatted_params
 
-    @pytest.mark.parametrize("n_piece, params, parsed_params", [
+    @pytest.mark.parametrize(("n_piece", "params", "parsed_params"), [
         (2, (0, 1, 2, 2), (0, 1, (2, 2), ())),
         (3, (1, 2, 3, 4, -2, 5), (1, 2, (3, 4, -2), (5, ))),
     ])
     def test_parse_piecewise_params(self, n_piece, params, parsed_params):
         assert parse_piecewise_params(n_piece, params) == parsed_params
 
-    @pytest.mark.parametrize("n_piece, params, each_piece_params", [
+    @pytest.mark.parametrize(("n_piece", "params", "each_piece_params"), [
         (2, (0, 1, 2, 2, 3), ((2, 2), (0, 0), (1, ), 3)),
         (3, (1, 2, 3, 4, -2, 5, 6), ((3, 4, -2), (1, -1, 41), (2, 7), 6)),
     ])

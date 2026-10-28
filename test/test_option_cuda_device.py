@@ -1,9 +1,7 @@
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
-
-import pytest
 
 from conftest import cuda_device_from_argv
 
@@ -57,5 +55,6 @@ class TestCudaDeviceWiring:
                              cwd=REPO_ROOT,
                              capture_output=True,
                              text=True,
-                             timeout=300)
+                             timeout=300,
+                             check=False)  # the returncode assert reports stdout+stderr
         assert res.returncode == 0, res.stdout + res.stderr

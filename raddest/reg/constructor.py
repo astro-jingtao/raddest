@@ -46,8 +46,9 @@ def construct_likelihood(p_cond):
     
     Parameters
     ----------
-
-    p_cond: (x, y, params) -> (N, ), the conditional probability of y given x, p(y|x; params)
+    p_cond : callable
+        ``(x, y, params) -> (N,)``, the conditional probability of y given
+        x, ``p(y|x; params)``.
 
     Returns
     -------

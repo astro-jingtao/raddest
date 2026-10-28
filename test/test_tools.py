@@ -60,8 +60,8 @@ class TestExtW2D:
                             jnp.array([[0.25, 0.35] * 2, [0.25, 0.35] * 2]))
         assert jnp.allclose(
             y_ext,
-            jnp.array([[0.45, 0.45] + [0.75, 0.75],
-                       [0.45, 0.45] + [0.75, 0.75]]))
+            jnp.array([[0.45, 0.45, 0.75, 0.75],
+                       [0.45, 0.45, 0.75, 0.75]]))
 
         assert jnp.allclose(x_err_ext, jnp.array([[0.1] * 4, [0.2] * 4]))
         assert jnp.allclose(y_err_ext, jnp.array([[0.15] * 4, [0.45] * 4]))

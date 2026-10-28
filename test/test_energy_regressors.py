@@ -142,7 +142,7 @@ class TestLogLinearEnergyPTJaxBackend:
         assert abs(params_mean[2] - TRUE_PARAMS['sig']) < 0.15
 
     def test_invalid_backend_and_chunk_combination(self, fitted_regressors):
-        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
+        regressor_pt, *_ = fitted_regressors
         xflow, yflow = regressor_pt.xflow, regressor_pt.yflow
         with pytest.raises(ValueError, match="must be 'numpy' or 'jax'"):
             LogLinearEnergyPT(xflow, yflow, backend='gpu')
@@ -156,7 +156,7 @@ class TestEnergyPTHierarchy:
 
     def test_loglinear_energy_pt_is_not_a_loglinear_ks(self,
                                                        fitted_regressors):
-        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
+        regressor_pt, *_ = fitted_regressors
         assert isinstance(regressor_pt, RegressorEnergyPT)
         assert isinstance(regressor_pt, RegressorKS)
         assert not isinstance(regressor_pt, LogLinearKS)

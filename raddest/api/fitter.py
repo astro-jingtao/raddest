@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Tuple
 
 import emcee
 import jax
@@ -480,7 +479,7 @@ class RegressorML(RegressorBase):
             atol=1e-3,
             rtol=1e-3,
             verbose=False,
-            **kwargs) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            **kwargs) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
 
         params_ml: jnp.ndarray
         params_std: jnp.ndarray
@@ -657,7 +656,7 @@ class SaturatedLogLinearML(RegressorML):
         if log_prior is None:
 
             def log_prior(params):
-                k, b, x0, x1, c0, c1, sig = params
+                k, _b, x0, x1, c0, c1, sig = params
                 is_bad = (sig <= 0) | (x0 > x1) | ((c1 - c0) * k < 0)
                 return jnp.where(is_bad, -jnp.inf, 0)
 

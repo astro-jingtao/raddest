@@ -257,7 +257,7 @@ trans_neglogplus_xshift_inv = jit(_trans_neglogplus_xshift_inv)
 
 
 def _trans_neglogplus_xshift_jac(x, x_err, params):
-    x_median, x_err_median, x_shift = params
+    x_median, x_err_median, _ = params
     k_x = jnp.where(x / x_median > 0, 1 / (x + x_median), 1 / x_median)
     k_x_err = jnp.where(x_err / x_err_median > 0, 1 / (x_err + x_err_median),
                         1 / x_err_median)

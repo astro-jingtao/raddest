@@ -2,7 +2,6 @@
 
 import jax
 import jax.numpy as jnp
-import pytest
 
 from raddest.reg.constructor import project_to_hyperplane
 
