@@ -55,6 +55,14 @@ params_mean, params_std, res_arr = regressor.fit(x_obs, y_obs,
                                                  N=1000)
 ```
 
+Two options tame the `O((N + M)^2 * permutations)` cost of each grid point: `chunk_size`/`chunk_iter` estimate every distance on random sub-samples (`pted`'s chunked mode), and `backend='jax'` evaluates the whole grid in a single jax process with the permutation tests as batched matrix products — orders of magnitude faster on a GPU, and it needs no worker processes:
+
+```python
+regressor = LogLinearEnergyPT(xflow, yflow, permutations=200, backend='jax')
+```
+
+See `example/fit_loglinear_energy.ipynb` for a run of both optimizers and both grid backends.
+
 Gradient descent on the energy distance itself (the synthetic sample is generated differentiably from the parameters, and the energy distance to the observed sample is minimized with adam):
 
 ```python
@@ -68,6 +76,17 @@ params_hat, loss_history = regressor.fit(x_obs, y_obs,
 ```
 
 Both regressors also provide `energy_test(params, x_obs, y_obs)`, which evaluates the fitted model against the observed data with a fresh synthetic sample and returns the energy distance and its p-value. Each energy-test evaluation costs `O((N + M)^2 * permutations)`; reduce `N` or `permutations` for large datasets.
+
+## Development
+
+- Tests: `pytest -q` from the repo root; select the GPU with `--cuda-device=<id>` (default `0`) when device 0 is busy.
+- Notebooks: `*.ipynb` are normalized on `git add` by [nbstripout](https://github.com/kynan/nbstripout) — code and outputs are kept, metadata and execution counts are stripped. One-time setup after cloning:
+
+```bash
+pip install nbstripout
+nbstripout --install
+git config filter.nbstripout.clean "$(python -c 'import sys; print(sys.executable)') -m nbstripout --keep-output"
+```
 
 ## Claude skill
 
