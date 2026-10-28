@@ -280,7 +280,7 @@ class FlowVI:
             transfer=self.transfer,
             transfer_params=self.transfer_params,
             n_node=n_node,
-            qmc=qmc)
+            int_method='qmc' if qmc else 'ghq')
 
         # to have a separate function for log_likelihood
         _, log_likelihood = construct_nf_fit_func(optax.adam(1e-3), self.flow)
