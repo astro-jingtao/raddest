@@ -4,6 +4,7 @@
 
 ### Changed
 
+- `raddest.grid_search`: `zoom_in_grid` takes `print_mean_std` (and the loop options, as before) keyword-only, and `gen_new_grid_quantile` mirrors `gen_new_grid_mean_std` with all options keyword-only; type annotations and docstrings throughout, module docstring. PLR0913 waived at `zoom_in_grid` with a documented reason.
 - `raddest.tools`: `get_ext_w_2d_from_edge` takes the two edge arrays keyword-only and `get_ext_w_2d_inter_grid` takes `k` keyword-only; type annotations and docstrings throughout, module docstring.
 - `raddest.transfer`: `Transfer.__init__` takes `params_estimator` and `name` keyword-only, and the `_combined` composition helpers take their component callables keyword-only (no external call sites affected). Type annotations and docstrings throughout the module.
 - `raddest.x_xerr` functions take only their leading pair positionally and everything else keyword-only: `nf_fit_frame` (data triple + params + optimizer positional, callables and convergence controls keyword-only), `construct_x_xerr_w` / `flow_params_init` (`x_obs`, `x_err` positional), `get_uv_min_max` (bounds positional), and `gen_xobs_trans(_log_rotation/_neglogplus/_neglogplus_xshift/_xshift_neglogplus)` (`flow`, `N` positional; range bounds and transform params keyword-only). Type annotations, docstrings, module docstring.

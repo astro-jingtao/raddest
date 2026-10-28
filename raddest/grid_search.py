@@ -1,11 +1,23 @@
+"""Grid-search machinery: weighted result summaries, parallel or batched
+grid evaluation, zoom-in iteration, and new-grid generators."""
+
+from __future__ import annotations
+
 import itertools
+from typing import Callable
 
 from joblib import Parallel, delayed
 import numpy as np
+from numpy.typing import ArrayLike
 from statsmodels.stats.weightstats import DescrStatsW
 
 
-def get_weighted_res(xs, w, std_min=0.01):
+def get_weighted_res(
+    xs: ArrayLike,
+    w: ArrayLike,
+    std_min: float = 0.01,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Weighted per-parameter mean and std (std floored at std_min)."""
     _mean = []
     _std = []
     for x in xs:
@@ -15,7 +27,13 @@ def get_weighted_res(xs, w, std_min=0.01):
     return np.array(_mean), np.array(_std)
 
 
-def grid_search(func, parmas, parser, num_process=10, batch_func=None):
+def grid_search(
+    func: Callable,
+    parmas: list,
+    parser: Callable,
+    num_process: int = 10,
+    batch_func: Callable | None = None,
+) -> np.ndarray:
     """Evaluate ``func`` on the full cartesian product of ``parmas``.
 
     ``batch_func``, when given, replaces the per-point ``func`` calls: it
@@ -33,18 +51,25 @@ def grid_search(func, parmas, parser, num_process=10, batch_func=None):
     return parser(res, iargs)
 
 
-def zoom_in_grid(func,
-                 params,
-                 w_index,
-                 parser,
-                 gen_new_grid,
-                 print_mean_std,
-                 num_process=10,
-                 max_i=10,
-                 rtol=1e-3,
-                 atol=1e-3,
-                 verbose=False,
-                 batch_func=None):
+# PLR0913 (12 args) waived here: the search driver carries the machinery
+# quartet, two callbacks, and five loop controls — one slot each.
+def zoom_in_grid(  # noqa: PLR0913
+                 func: Callable,
+                 params: list,
+                 w_index: int,
+                 parser: Callable,
+                 gen_new_grid: Callable,
+                 *,
+                 print_mean_std: Callable,
+                 num_process: int = 10,
+                 max_i: int = 10,
+                 rtol: float = 1e-3,
+                 atol: float = 1e-3,
+                 verbose: bool = False,
+                 batch_func: Callable | None = None) -> np.ndarray:
+    """Iterate grid_search with grids regenerated from the weighted fit,
+    stopping when the first three weighted means converge (rtol/atol) or
+    after max_i rounds."""
     n_par = len(params)
     res_arr = grid_search(func, params, parser, num_process=num_process,
                           batch_func=batch_func)
@@ -81,19 +106,28 @@ def zoom_in_grid(func,
     return res_arr
 
 
-def gen_grid(cen, d_low, d_up, n, _range):
+def gen_grid(
+    cen: float,
+    d_low: float,
+    d_up: float,
+    n: int,
+    _range: tuple[float, float],
+) -> np.ndarray:
+    """n points from cen-d_low to cen+d_up, clipped to _range."""
     return np.linspace(max(_range[0], cen - d_low), min(_range[1], cen + d_up),
                        n)
 
 
-def gen_new_grid_mean_std(res_arr,
+def gen_new_grid_mean_std(res_arr: np.ndarray,
                           *,
-                          n_par,
-                          w_index,
-                          n=10,
-                          n_sigma=2,
-                          d_par_min=0.2,
-                          range_par=None):
+                          n_par: int,
+                          w_index: int,
+                          n: int | float | list = 10,
+                          n_sigma: int | float | list = 2,
+                          d_par_min: float | list = 0.2,
+                          range_par: list | None = None) -> list:
+    """New grid per parameter: weighted mean +/- n_sigma*std (min d_par_min),
+    clipped to range_par; scalars broadcast to per-parameter lists."""
     res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T,
                                          res_arr[:, w_index])
 
@@ -118,14 +152,18 @@ def gen_new_grid_mean_std(res_arr,
     return new_list
 
 
-def gen_new_grid_quantile(res_arr,
-                          n_par,
-                          w_index,
-                          n=10,
-                          q_low=0.16,
-                          q_up=0.84,
-                          d_par_min=0.2,
-                          range_par=None):
+def gen_new_grid_quantile(res_arr: np.ndarray,
+                          *,
+                          n_par: int,
+                          w_index: int,
+                          n: int | float | list = 10,
+                          q_low: float | list = 0.16,
+                          q_up: float | list = 0.84,
+                          d_par_min: float | list = 0.2,
+                          range_par: list | None = None) -> list:
+    """New grid per parameter around the weighted median, spanning the
+    [q_low, q_up] weighted quantiles (min half-width d_par_min), clipped to
+    range_par; scalars broadcast to per-parameter lists."""
     # if n, n_sigma, d_par_min are integers/floats, we convert them to lists of integers
     if isinstance(n, (int, float)):
         n = [n] * n_par
@@ -154,7 +192,7 @@ def gen_new_grid_quantile(res_arr,
     return new_list
 
 
-def flag_bad(x):
+def flag_bad(x: ArrayLike) -> np.ndarray:
     """
     It returns True if the input is NaN or Inf, and False otherwise
 
@@ -165,7 +203,12 @@ def flag_bad(x):
     return np.isnan(x) | np.isinf(x)
 
 
-def quantile(x, q, weights=None, N_min=2):
+def quantile(
+    x: ArrayLike,
+    q: ArrayLike,
+    weights: ArrayLike | None = None,
+    N_min: int = 2,
+) -> list | np.ndarray:
     """
     Compute sample quantiles with support for weighted samples.
 

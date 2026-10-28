@@ -48,7 +48,8 @@ class TestGridSearch:
                                4,
                                parser,
                                gen_new_grid_mean_std,
-                               lambda m, s: print('mean', m, 'std', s),
+                               print_mean_std=lambda m, s: print(
+                                   'mean', m, 'std', s),
                                num_process=2,
                                max_i=3,
                                verbose=True)
@@ -70,7 +71,7 @@ class TestGridSearch:
                                4,
                                parser,
                                drifting_grid,
-                               lambda m, s: None,
+                               print_mean_std=lambda m, s: None,
                                num_process=2,
                                max_i=2,
                                verbose=True)
@@ -82,7 +83,7 @@ class TestGridSearchBatch:
     """The batch_func evaluation hook (jax grid backend)."""
 
     @staticmethod
-    def quad_batch(params_grid):
+    def quad_batch(params_grid) -> np.ndarray:
         # vectorized twin of quad_compare over grid rows
         k, b, c = params_grid[:, 0], params_grid[:, 1], params_grid[:, 2]
         r = (k - 2)**2 + (b - 1)**2 + (c - 0.5)**2
@@ -106,7 +107,7 @@ class TestGridSearchBatch:
                                4,
                                parser,
                                gen_new_grid_mean_std,
-                               lambda m, s: None,
+                               print_mean_std=lambda m, s: None,
                                max_i=3,
                                batch_func=self.quad_batch)
         best = res_arr[np.argmax(res_arr[:, 4])]

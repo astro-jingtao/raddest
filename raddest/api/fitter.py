@@ -1121,7 +1121,7 @@ class RegressorKS(RegressorBase):
                                w_index,
                                self.parser,
                                this_gen_new_grid,
-                               self.print_mean_std,
+                               print_mean_std=self.print_mean_std,
                                num_process=num_process,
                                max_i=max_i,
                                rtol=rtol,
