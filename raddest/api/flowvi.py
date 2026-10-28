@@ -262,10 +262,10 @@ class FlowVI:
 
         return gen_xobs_trans(self.flow,
                               N,
-                              x_min,
-                              x_max,
-                              x_err_min,
-                              x_err_max,
+                              x_min=x_min,
+                              x_max=x_max,
+                              x_err_min=x_err_min,
+                              x_err_max=x_err_max,
                               transfer=self.transfer,
                               transfer_params=self.transfer_params,
                               return_numpy=return_numpy)

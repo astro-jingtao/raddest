@@ -42,7 +42,8 @@ class TestNfFitVariants:
                                                verbose=False,
                                                early_stop=False)
         _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans_neglogplus(
-            flow, 100, 0.5, 3.5, 0.0, 0.5, params)
+            flow, 100, x_min=0.5, x_max=3.5, x_err_min=0.0, x_err_max=0.5,
+            transfer_params=params)
         assert np.asarray(x_obs_gen).shape == (100, )
 
     def test_log_rotation_roundtrip(self):
@@ -57,7 +58,8 @@ class TestNfFitVariants:
                                                  verbose=False,
                                                  early_stop=False)
         _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans_log_rotation(
-            flow, 100, 0.5, 3.5, 0.0, 0.5, params)
+            flow, 100, x_min=0.5, x_max=3.5, x_err_min=0.0, x_err_max=0.5,
+            transfer_params=params)
         assert np.asarray(x_obs_gen).shape == (100, )
 
 
@@ -77,10 +79,10 @@ class TestGenXobsTransWrappers:
                     early_stop=False)
         _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans(flow_vi.flow,
                                                      50,
-                                                     0.5,
-                                                     3.5,
-                                                     0.0,
-                                                     0.5,
+                                                     x_min=0.5,
+                                                     x_max=3.5,
+                                                     x_err_min=0.0,
+                                                     x_err_max=0.5,
                                                      return_numpy=True)
         assert np.asarray(x_obs_gen).shape == (50, )
 
@@ -95,10 +97,12 @@ class TestGenXobsTransWrappers:
                                                early_stop=False)
         # shift = 0 reduces both xshift variants to plain NegLogPlus
         p3 = [float(params[0]), float(params[1]), 0.0]
-        out1 = gen_xobs_trans_neglogplus_xshift(flow, 50, 0.5, 3.5, 0.0, 0.5,
-                                                p3)
-        out2 = gen_xobs_trans_xshift_neglogplus(flow, 50, 0.5, 3.5, 0.0, 0.5,
-                                                p3)
+        out1 = gen_xobs_trans_neglogplus_xshift(
+            flow, 50, x_min=0.5, x_max=3.5, x_err_min=0.0, x_err_max=0.5,
+            transfer_params=p3)
+        out2 = gen_xobs_trans_xshift_neglogplus(
+            flow, 50, x_min=0.5, x_max=3.5, x_err_min=0.0, x_err_max=0.5,
+            transfer_params=p3)
         for out in (out1, out2):
             assert np.asarray(out[2]).shape == (50, )
 

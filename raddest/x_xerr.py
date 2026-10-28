@@ -1,12 +1,20 @@
+"""Normalizing-flow machinery for the (x, x_err) plane: flow fitting on
+integration grids, parameter initialization with shrinkage guesses, and
+transform-aware sample generation."""
+
 # TODO: quantile transform
 
-from typing import Union
+from __future__ import annotations
 
+from typing import Callable
+
+import jax
 from jax import grad, jit
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 from ndtest.ksnd import ks2d2s
 import numpy as np
+from numpy.typing import ArrayLike
 import optax
 import pandas as pd
 from pzflow import Flow
@@ -17,19 +25,31 @@ from .tools import get_ext_w, get_ext_w_inter_grid, get_ext_w_qmc, transform_dat
 from .transfer import LogRotation, NegLogPlus, NegLogPlusXShift, Transfer, XShiftNegLogPlus
 
 
-def nf_fit_frame(u_ext,
-                 v_ext,
-                 w,
-                 params,
-                 optimizer,
-                 update_params,
-                 log_likelihood,
-                 n_train=1000,
-                 check_per_step=100,
-                 verbose=False,
-                 early_stop=True,
-                 max_stuck=10,
-                 stuck_frac=0.01):
+# PLR0913 (13 args) waived here: the training loop carries its data triple,
+# the flow parameter state, the optimizer with its two compiled callables,
+# and the five convergence controls — one slot each.
+def nf_fit_frame(  # noqa: PLR0913
+        u_ext: jax.Array,
+        v_ext: jax.Array,
+        w: jax.Array,
+        params: list,
+        optimizer,
+        *,
+        update_params: Callable,
+        log_likelihood: Callable,
+        n_train: int = 1000,
+        check_per_step: int = 100,
+        verbose: bool = False,
+        early_stop: bool = True,
+        max_stuck: int = 10,
+        stuck_frac: float = 0.01) -> tuple[list, list]:
+    '''Run the optax loop, tracking the best params with early stopping.
+
+    A check every check_per_step steps compares the loss to the best so far:
+    clearly better resets the stuck counter, close (within stuck_frac) or
+    worse increments it, and early_stop breaks after max_stuck stuck checks.
+    Returns (params_best, loss_history).
+    '''
 
     opt_state = optimizer.init(params)
 
@@ -67,7 +87,12 @@ def nf_fit_frame(u_ext,
     return params_best, loss
 
 
-def find_uv_bounds(_bijector_info):
+def find_uv_bounds(_bijector_info: tuple) -> tuple | None:
+    '''Extract (u_min, u_max, v_min, v_max) from a flow's bijector info.
+
+    Searches the bijector tree for the (first) ShiftBounds node; returns None
+    when the chain carries no bounds.
+    '''
     if _bijector_info[0] == 'Chain':
         for tup in _bijector_info[1]:
             result = find_uv_bounds(tup)
@@ -80,7 +105,7 @@ def find_uv_bounds(_bijector_info):
     return None  # If not 'Chain' or 'ShiftBounds'，return None
 
 
-def construct_nf_fit_func(optimizer, flow):
+def construct_nf_fit_func(optimizer, flow: Flow) -> tuple[Callable, Callable]:
     '''
     u_ext and v_ext are transformed value
     x_min, x_max, x_err_min, x_err_max are for original value
@@ -134,16 +159,22 @@ def construct_nf_fit_func(optimizer, flow):
     return update_params, log_likelihood
 
 
-def construct_x_xerr_w(x_obs,
-                       x_err,
-                       x_min=-jnp.inf,
-                       x_max=jnp.inf,
-                       x_err_min=-jnp.inf,
-                       x_err_max=jnp.inf,
-                       n_node=21,
-                       int_method='ghq',
-                       transfer: Union[Transfer, None] = None,
-                       transfer_params=None):
+# PLR0913 (10 args) waived here: the observation pair, four range bounds,
+# and the integration and transform controls each name one physical input.
+def construct_x_xerr_w(  # noqa: PLR0913
+        x_obs: ArrayLike,
+        x_err: ArrayLike,
+        *,
+        x_min: float = -jnp.inf,
+        x_max: float = jnp.inf,
+        x_err_min: float = -jnp.inf,
+        x_err_max: float = jnp.inf,
+        n_node: int = 21,
+        int_method: str = 'ghq',
+        transfer: Transfer | None = None,
+        transfer_params: ArrayLike | None = None) -> tuple[
+            jax.Array | np.ndarray, jax.Array | np.ndarray,
+            jax.Array | np.ndarray]:
     '''
     Here x_obs and x_err are the original value
     x_min, x_max, x_err_min, x_err_max are for original value
@@ -179,8 +210,17 @@ def construct_x_xerr_w(x_obs,
     return u_ext, v_ext, w
 
 
-def get_uv_min_max(x_min, x_max, x_err_min, x_err_max, transfer,
-                   transfer_params):
+def get_uv_min_max(
+    x_min: float,
+    x_max: float,
+    x_err_min: float,
+    x_err_max: float,
+    *,
+    transfer: Transfer,
+    transfer_params: ArrayLike | None,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    '''Transform a 100x100 grid over the (x, x_err) bounds and return the
+    (u_min, u_max, v_min, v_max) of the transformed values (NaN-ignoring).'''
     xx = jnp.linspace(x_min, x_max, 100)
     xexe = jnp.linspace(x_err_min, x_err_max, 100)
     xx, xexe = jnp.meshgrid(xx, xexe)
@@ -195,21 +235,32 @@ def get_uv_min_max(x_min, x_max, x_err_min, x_err_max, transfer,
 
 
 # TODO: Tweedie's formula
-def flow_params_init(x_obs,
-                     x_err,
-                     x_min=-jnp.inf,
-                     x_max=jnp.inf,
-                     x_err_min=-jnp.inf,
-                     x_err_max=jnp.inf,
-                     flow=None,
-                     guess_method='gg',
-                     guess_recalibrate=None,
-                     guess_verbose=False,
-                     derive_uv_bounds=False,
-                     transfer: Union[Transfer, None] = None,
-                     transfer_params=None,
-                     n_pre=100,
-                     verbose=False):
+# PLR0913 (15 args) waived here: the observation pair plus the flow
+# initialization guess, bounds, shrinkage, and transform controls.
+def flow_params_init(  # noqa: PLR0913
+        x_obs: ArrayLike,
+        x_err: ArrayLike,
+        *,
+        x_min: float = -jnp.inf,
+        x_max: float = jnp.inf,
+        x_err_min: float = -jnp.inf,
+        x_err_max: float = jnp.inf,
+        flow: Flow | None = None,
+        guess_method: str = 'gg',
+        guess_recalibrate: bool | None = None,
+        guess_verbose: bool = False,
+        derive_uv_bounds: bool = False,
+        transfer: Transfer | None = None,
+        transfer_params: ArrayLike | None = None,
+        n_pre: int = 100,
+        verbose: bool = False) -> tuple[Flow, list]:
+    '''Initialize the flow: shrinkage-based pre-fit and parameter extraction.
+
+    With n_pre > 0 the (optionally recalibrated) shrinkage estimate seeds a
+    short pre-training run on transformed data; derive_uv_bounds builds the
+    bijector with ShiftBounds from the transformed range grid. Returns
+    (flow, params) where params are the flow's trainable parameter entries.
+    '''
 
     if n_pre > 0:
         x_obs_shrink, x_err_shrink = shrink_data(
@@ -231,7 +282,8 @@ def flow_params_init(x_obs,
     if flow is None:
         if derive_uv_bounds:
             u_min, u_max, v_min, v_max = get_uv_min_max(
-                x_min, x_max, x_err_min, x_err_max, transfer, transfer_params)
+                x_min, x_max, x_err_min, x_err_max, transfer=transfer,
+                transfer_params=transfer_params)
             bijector = Chain(
                 ShiftBounds(np.array([u_min, v_min]), np.array([u_max, v_max]),
                             4.0),
@@ -259,8 +311,12 @@ def flow_params_init(x_obs,
 
 
 # TODO: give trans_params
-def nf_fit_trans_neglogplus(x_obs, x_err, **kwargs):
-
+def nf_fit_trans_neglogplus(
+    x_obs: ArrayLike,
+    x_err: ArrayLike,
+    **kwargs,
+) -> tuple[Flow, list, list]:
+    '''nf_fit_general with the NegLogPlus transform, params from medians.'''
     x_median = np.median(x_obs)
     x_err_median = np.median(x_err)
 
@@ -273,8 +329,14 @@ def nf_fit_trans_neglogplus(x_obs, x_err, **kwargs):
                           **kwargs)
 
 
-def nf_fit_trans_log_rotation(x_obs, x_err, *, theta, **kwargs):
-
+def nf_fit_trans_log_rotation(
+    x_obs: ArrayLike,
+    x_err: ArrayLike,
+    *,
+    theta: float,
+    **kwargs,
+) -> tuple[Flow, list, list]:
+    '''nf_fit_general with the LogRotation transform, params = theta.'''
     transfer_params = theta
 
     return nf_fit_general(x_obs,
@@ -284,33 +346,39 @@ def nf_fit_trans_log_rotation(x_obs, x_err, *, theta, **kwargs):
                           **kwargs)
 
 
-def nf_fit_general(x_obs,
-                   x_err,
-                   *,
-                   optimizer,
-                   n_pre=100,
-                   n_train=500,
-                   n_node=21,
-                   int_method='ghq',
-                   flow=None,
-                   guess_method='gg',
-                   guess_recalibrate=None,
-                   guess_verbose=False,
-                   derive_uv_bounds=False,
-                   skip_fitting_if_init_good=False,
-                   init_good_theshold=0.05,
-                   init_check_N=10000,
-                   x_min=-jnp.inf,
-                   x_max=jnp.inf,
-                   x_err_min=-jnp.inf,
-                   x_err_max=jnp.inf,
-                   check_per_step=10,
-                   early_stop=True,
-                   max_stuck=5,
-                   stuck_frac=0.05,
-                   transfer: Union[Transfer, None] = None,
-                   transfer_params=None,
-                   verbose=False):
+# PLR0913 (26 args) waived here: the flow-fitting front door — every keyword
+# is one orthogonal training/initialization/integration control.
+def nf_fit_general(  # noqa: PLR0913
+        x_obs: ArrayLike,
+        x_err: ArrayLike,
+        *,
+        optimizer,
+        n_pre: int = 100,
+        n_train: int = 500,
+        n_node: int = 21,
+        int_method: str = 'ghq',
+        flow: Flow | None = None,
+        guess_method: str = 'gg',
+        guess_recalibrate: bool | None = None,
+        guess_verbose: bool = False,
+        derive_uv_bounds: bool = False,
+        skip_fitting_if_init_good: bool = False,
+        init_good_theshold: float = 0.05,
+        init_check_N: int = 10000,
+        x_min: float = -jnp.inf,
+        x_max: float = jnp.inf,
+        x_err_min: float = -jnp.inf,
+        x_err_max: float = jnp.inf,
+        check_per_step: int = 10,
+        early_stop: bool = True,
+        max_stuck: int = 5,
+        stuck_frac: float = 0.05,
+        transfer: Transfer | None = None,
+        transfer_params: ArrayLike | None = None,
+        verbose: bool = False) -> tuple[Flow, list, list]:
+    '''Fit the (x, x_err) flow: integrate, initialize, optionally skip the
+    training when the initialization already passes the KS check, then run
+    the optax loop. Returns (flow, loss_history, transfer_params).'''
 
     u_ext, v_ext, w = construct_x_xerr_w(x_obs,
                                          x_err,
@@ -343,10 +411,10 @@ def nf_fit_general(x_obs,
         _, x_err_gen, x_obs_gen = gen_xobs_trans(
             flow,
             init_check_N,
-            x_min,
-            x_max,
-            x_err_min,
-            x_err_max,
+            x_min=x_min,
+            x_max=x_max,
+            x_err_min=x_err_min,
+            x_err_max=x_err_max,
             transfer=transfer,
             transfer_params=transfer_params,
             return_numpy=True)
@@ -366,8 +434,8 @@ def nf_fit_general(x_obs,
                                 w,
                                 params,
                                 optimizer,
-                                update_params,
-                                log_likelihood,
+                                update_params=update_params,
+                                log_likelihood=log_likelihood,
                                 n_train=n_train,
                                 check_per_step=check_per_step,
                                 verbose=verbose,
@@ -380,15 +448,21 @@ def nf_fit_general(x_obs,
     return flow, loss, transfer_params
 
 
-def gen_xobs_trans(flow,
-                   N,
-                   x_min,
-                   x_max,
-                   x_err_min,
-                   x_err_max,
-                   transfer: Union[Transfer, None] = None,
-                   transfer_params=None,
-                   return_numpy=False):
+# PLR0913 (9 args) waived here: the flow plus its sample size, four range
+# bounds, and the transform pair.
+def gen_xobs_trans(  # noqa: PLR0913
+        flow: Flow,
+        N: int,
+        *,
+        x_min: float,
+        x_max: float,
+        x_err_min: float,
+        x_err_max: float,
+        transfer: Transfer | None = None,
+        transfer_params: ArrayLike | None = None,
+        return_numpy: bool = False) -> tuple[
+            jax.Array | np.ndarray, jax.Array | np.ndarray,
+            jax.Array | np.ndarray]:
     '''
     Here x_min, x_max, xerr_min, xerr_max are for original varible (x, x_err)
     '''
@@ -420,89 +494,105 @@ def gen_xobs_trans(flow,
     return x, x_err, x_obs
 
 
-def gen_xobs_trans_log_rotation(flow,
-                                N,
-                                x_min,
-                                x_max,
-                                x_err_min,
-                                x_err_max,
-                                transfer_params,
-                                return_numpy=False):
+def gen_xobs_trans_log_rotation(
+    flow: Flow,
+    N: int,
+    *,
+    x_min: float,
+    x_max: float,
+    x_err_min: float,
+    x_err_max: float,
+    transfer_params: ArrayLike,
+    return_numpy: bool = False,
+) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
+           jax.Array | np.ndarray]:
     '''
     return:
         x_gen, x_err_gen, x_obs_gen
     '''
     return gen_xobs_trans(flow,
                           N,
-                          x_min,
-                          x_max,
-                          x_err_min,
-                          x_err_max,
+                          x_min=x_min,
+                          x_max=x_max,
+                          x_err_min=x_err_min,
+                          x_err_max=x_err_max,
                           transfer=LogRotation(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
 
-def gen_xobs_trans_neglogplus(flow,
-                              N,
-                              x_min,
-                              x_max,
-                              x_err_min,
-                              x_err_max,
-                              transfer_params,
-                              return_numpy=False):
+def gen_xobs_trans_neglogplus(
+    flow: Flow,
+    N: int,
+    *,
+    x_min: float,
+    x_max: float,
+    x_err_min: float,
+    x_err_max: float,
+    transfer_params: ArrayLike,
+    return_numpy: bool = False,
+) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
+           jax.Array | np.ndarray]:
     '''
     return:
         x_gen, x_err_gen, x_obs_gen
     '''
     return gen_xobs_trans(flow,
                           N,
-                          x_min,
-                          x_max,
-                          x_err_min,
-                          x_err_max,
+                          x_min=x_min,
+                          x_max=x_max,
+                          x_err_min=x_err_min,
+                          x_err_max=x_err_max,
                           transfer=NegLogPlus(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
 
-def gen_xobs_trans_neglogplus_xshift(flow,
-                                     N,
-                                     x_min,
-                                     x_max,
-                                     x_err_min,
-                                     x_err_max,
-                                     transfer_params,
-                                     return_numpy=False):
+def gen_xobs_trans_neglogplus_xshift(
+    flow: Flow,
+    N: int,
+    *,
+    x_min: float,
+    x_max: float,
+    x_err_min: float,
+    x_err_max: float,
+    transfer_params: ArrayLike,
+    return_numpy: bool = False,
+) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
+           jax.Array | np.ndarray]:
     # NegLogPlusXShift
     # log(x/x_median + 1) + shift
     return gen_xobs_trans(flow,
                           N,
-                          x_min,
-                          x_max,
-                          x_err_min,
-                          x_err_max,
+                          x_min=x_min,
+                          x_max=x_max,
+                          x_err_min=x_err_min,
+                          x_err_max=x_err_max,
                           transfer=NegLogPlusXShift(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)
 
 
-def gen_xobs_trans_xshift_neglogplus(flow,
-                                     N,
-                                     x_min,
-                                     x_max,
-                                     x_err_min,
-                                     x_err_max,
-                                     transfer_params,
-                                     return_numpy=False):
+def gen_xobs_trans_xshift_neglogplus(
+    flow: Flow,
+    N: int,
+    *,
+    x_min: float,
+    x_max: float,
+    x_err_min: float,
+    x_err_max: float,
+    transfer_params: ArrayLike,
+    return_numpy: bool = False,
+) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
+           jax.Array | np.ndarray]:
     # XShiftNegLogPlus
     # log((x + shift)/x_median + 1)
     return gen_xobs_trans(flow,
                           N,
-                          x_min,
-                          x_max,
-                          x_err_min,
-                          x_err_max,
+                          x_min=x_min,
+                          x_max=x_max,
+                          x_err_min=x_err_min,
+                          x_err_max=x_err_max,
                           transfer=XShiftNegLogPlus(),
                           transfer_params=transfer_params,
                           return_numpy=return_numpy)

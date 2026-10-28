@@ -46,10 +46,10 @@ def gen_xy_obs_prepare(flowx: Flow,  # noqa: PLR0913 — one parameter per physi
     x_gen, x_err_gen, x_obs_gen = gen_xobs_trans(
         flowx,
         n,
-        x_min,
-        x_max,
-        x_err_min,
-        x_err_max,
+        x_min=x_min,
+        x_max=x_max,
+        x_err_min=x_err_min,
+        x_err_max=x_err_max,
         transfer=x_transfer,
         transfer_params=x_transfer_params)
 
@@ -59,10 +59,10 @@ def gen_xy_obs_prepare(flowx: Flow,  # noqa: PLR0913 — one parameter per physi
     y_gen_kdt, y_err_gen_kdt, _ = gen_xobs_trans(
         flowy,
         n,
-        y_min,
-        y_max,
-        y_err_min,
-        y_err_max,
+        x_min=y_min,
+        x_max=y_max,
+        x_err_min=y_err_min,
+        x_err_max=y_err_max,
         transfer=y_transfer,
         transfer_params=y_transfer_params)
 
