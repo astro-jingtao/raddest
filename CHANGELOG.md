@@ -4,6 +4,7 @@
 
 ### Changed
 
+- `raddest.transfer`: `Transfer.__init__` takes `params_estimator` and `name` keyword-only, and the `_combined` composition helpers take their component callables keyword-only (no external call sites affected). Type annotations and docstrings throughout the module.
 - `raddest.x_xerr` functions take only their leading pair positionally and everything else keyword-only: `nf_fit_frame` (data triple + params + optimizer positional, callables and convergence controls keyword-only), `construct_x_xerr_w` / `flow_params_init` (`x_obs`, `x_err` positional), `get_uv_min_max` (bounds positional), and `gen_xobs_trans(_log_rotation/_neglogplus/_neglogplus_xshift/_xshift_neglogplus)` (`flow`, `N` positional; range bounds and transform params keyword-only). Type annotations, docstrings, module docstring.
 - `raddest.reg.energy` compare/loss constructors take `y_kdt`/`y_err_kdt` (and for `construct_energy_compare` also `x_obs`/`y_obs`/`permutations`) as keyword-only, matching the `construct_ks_compare` protocol: `construct_energy_compare`, `construct_energy_compare_jax`, `construct_energy_loss`.
 - `get_xyw_trans` now takes only the four data arrays (`x_obs`, `y_obs`, `x_err`, `y_err`) positionally; `flowx`, `flowy`, the four range tuples and all remaining options are keyword-only. The integration dispatch (`auto`/`ghq`/`qmc`/`grid`/`qgrid`/`inter_grid`/hybrids) is factored into helpers inside `raddest.reg.map`, and the module gains type annotations and docstrings.
