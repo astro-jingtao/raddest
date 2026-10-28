@@ -1,5 +1,8 @@
 
 
+from __future__ import annotations
+
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -10,6 +13,12 @@ from raddest.tools import transform_data
 from raddest.transfer import NegLogPlus
 
 RANGES = ([0.5, 3.5], [0.0, 0.4], [1.0, 100.0], [0.0, 10.0])
+RANGES_KW = {
+    'x_range': RANGES[0],
+    'x_err_range': RANGES[1],
+    'y_range': RANGES[2],
+    'y_err_range': RANGES[3],
+}
 
 
 def transfer_kwargs(xflow, yflow, x_obs, x_err, y_obs, y_err):
@@ -23,7 +32,7 @@ def transfer_kwargs(xflow, yflow, x_obs, x_err, y_obs, y_err):
 
 class FakeKernel:
 
-    def __call__(self, x):
+    def __call__(self, x: jax.Array) -> jax.Array:
         return jnp.exp(-jnp.abs(x))
 
 
@@ -38,9 +47,9 @@ class TestGetXYWTrans:
                                             y_obs,
                                             x_err,
                                             y_err,
-                                            xflow.flow,
-                                            yflow.flow,
-                                            *RANGES,
+                                            flowx=xflow.flow,
+                                            flowy=yflow.flow,
+                                            **RANGES_KW,
                                             int_method=method,
                                             n=5,
                                             **tkw)
@@ -58,10 +67,12 @@ class TestGetXYWTrans:
                                         y_obs,
                                         big_err,
                                         y_err,
-                                        xflow.flow,
-                                        yflow.flow,
-                                        [0.5, 3.5], [0.0, 20.0], [1.0, 100.0],
-                                        [0.0, 10.0],
+                                        flowx=xflow.flow,
+                                        flowy=yflow.flow,
+                                        x_range=[0.5, 3.5],
+                                        x_err_range=[0.0, 20.0],
+                                        y_range=[1.0, 100.0],
+                                        y_err_range=[0.0, 10.0],
                                         int_method='auto',
                                         n=4,
                                         **tkw)
@@ -72,9 +83,9 @@ class TestGetXYWTrans:
                                         y_obs,
                                         x_err,
                                         y_err,
-                                        xflow.flow,
-                                        yflow.flow,
-                                        *RANGES,
+                                        flowx=xflow.flow,
+                                        flowy=yflow.flow,
+                                        **RANGES_KW,
                                         int_method='auto',
                                         n=4,
                                         **tkw)
@@ -88,9 +99,9 @@ class TestGetXYWTrans:
                           y_obs,
                           x_err,
                           y_err,
-                          xflow.flow,
-                          yflow.flow,
-                          *RANGES,
+                          flowx=xflow.flow,
+                          flowy=yflow.flow,
+                          **RANGES_KW,
                           int_method='bogus',
                           n=4)
 
@@ -107,9 +118,9 @@ class TestGetXYWTrans:
             y_obs,
             x_err,
             y_err,
-            xflow.flow,
-            yflow.flow,
-            *RANGES,
+            flowx=xflow.flow,
+            flowy=yflow.flow,
+            **RANGES_KW,
             int_method='ghq',
             x_transfer=transfer,
             x_transfer_params=transfer_params,
@@ -126,9 +137,9 @@ class TestGetXYWTrans:
                                         y_obs,
                                         x_err,
                                         y_err,
-                                        xflow.flow,
-                                        yflow.flow,
-                                        *RANGES,
+                                        flowx=xflow.flow,
+                                        flowy=yflow.flow,
+                                        **RANGES_KW,
                                         int_method='ghq',
                                         ignore_y_err_c_y=True,
                                         get_w_add=get_w_add_lognorm,
@@ -145,9 +156,9 @@ class TestGetXYWTrans:
                                         y_obs,
                                         x_err,
                                         y_err,
-                                        xflow.flow,
-                                        yflow.flow,
-                                        *RANGES,
+                                        flowx=xflow.flow,
+                                        flowy=yflow.flow,
+                                        **RANGES_KW,
                                         int_method='qmc',
                                         flow_batch_size=16,
                                         kde_batch_size=16,
@@ -195,9 +206,9 @@ class TestGetXYWTransMixed:
                                             y_obs,
                                             x_err_mixed,
                                             y_err,
-                                            xflow.flow,
-                                            yflow.flow,
-                                            *RANGES,
+                                            flowx=xflow.flow,
+                                            flowy=yflow.flow,
+                                            **RANGES_KW,
                                             int_method=method,
                                             n=4,
                                             **tkw)
@@ -236,9 +247,9 @@ class TestGetXYWTransMixed:
             y_obs[:n],
             x_err_plain,
             y_err[:n],
-            plain_flow.flow,
-            yflow.flow,
-            *RANGES,
+            flowx=plain_flow.flow,
+            flowy=yflow.flow,
+            **RANGES_KW,
             int_method='ghq',
             y_transfer=yflow.transfer,
             y_transfer_params=yflow.transfer_params,
@@ -283,9 +294,9 @@ class TestGetXYWTransNoYTransfer:
                                         y_obs_plain,
                                         x_err,
                                         y_err,
-                                        xflow_plain.flow,
-                                        yflow_plain.flow,
-                                        *RANGES,
+                                        flowx=xflow_plain.flow,
+                                        flowy=yflow_plain.flow,
+                                        **RANGES_KW,
                                         int_method='ghq',
                                         n=5)
         assert x_ext.shape == w.shape
