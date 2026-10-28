@@ -36,11 +36,16 @@ from raddest.reg.constructor import (
 )
 from raddest.reg.energy import (
     construct_energy_compare,
+    construct_energy_compare_jax,
     construct_energy_loss,
     energy_test,
 )
 from raddest.reg.func import generate_piecewise_linear, saturated_linear_smooth
-from raddest.reg.func_jax import generate_piecewise_linear_jax, saturated_linear_smooth_jax
+from raddest.reg.func_jax import (
+    generate_piecewise_linear_jax,
+    loglinear_scatter_jax,
+    saturated_linear_smooth_jax,
+)
 from raddest.reg.ks import (
     gen_xy_obs_prepare,
     linear_scatter,
@@ -896,6 +901,13 @@ class RegressorKS(RegressorBase):
 
     compare_constructor = staticmethod(construct_ks_compare)
 
+    # Grid evaluation backend: 'numpy' runs one joblib worker per grid point
+    # (the compare closure must then stay jax-free, or every worker process
+    # would allocate its own GPU context and OOM); 'jax' evaluates the whole
+    # grid inside this process through compare_batch_constructor instead.
+    backend = 'numpy'
+    compare_batch_constructor = None
+
     def __init__(self,
                  xflow,
                  yflow,
@@ -988,7 +1000,9 @@ class RegressorKS(RegressorBase):
         y_err_range : array_like or None, optional
             Range of y observational errors. If None, an internal default is used.
         num_process : int, default=10
-            Number of parallel processes used during grid evaluation.
+            Number of parallel processes used during grid evaluation. Ignored
+            when the regressor runs its jax grid backend, which evaluates the
+            whole grid in this process.
         max_i : int, default=10
             Maximum number of zoom-in iterations for the adaptive grid search.
         rtol : float, default=1e-3
@@ -1044,9 +1058,30 @@ class RegressorKS(RegressorBase):
             return_numpy=True)
 
         # Build the compare closure here, not as a module-level jax-using function:
-        # each process in zoom_in_grid must not import jax or it will OOM.
+        # with the numpy backend each process in zoom_in_grid must not import
+        # jax or it will OOM.
         compare = self.compare_constructor(self.generator_cond, x_gen, x_obs_gen,
                                            y_kdt, y_err_kdt, x_obs, y_obs)
+
+        batch_compare = None
+        if self.backend == 'jax':
+            if self.compare_batch_constructor is None:
+                raise ValueError(f"{type(self).__name__} defines no jax grid "
+                                 "backend; fit with backend='numpy'.")
+            if not hasattr(self, 'func_x2y_jax'):
+                raise ValueError(f"{type(self).__name__} provides no "
+                                 "func_x2y_jax; the jax grid backend needs a "
+                                 "differentiable scatter function.")
+            batch_compare = self.compare_batch_constructor(
+                self.func_x2y_jax,
+                x_obs,
+                y_obs,
+                x_gen,
+                x_obs_gen,
+                y_kdt,
+                y_err_kdt,
+                y_min=y_range[0],
+                y_max=y_range[1])
 
         w_index = len(params_list) + 1
 
@@ -1062,7 +1097,8 @@ class RegressorKS(RegressorBase):
                                max_i=max_i,
                                rtol=rtol,
                                atol=atol,
-                               verbose=verbose)
+                               verbose=verbose,
+                               batch_func=batch_compare)
 
         n_par = len(params_list)
 
@@ -1075,7 +1111,8 @@ class RegressorKS(RegressorBase):
             res_arr = grid_search(compare,
                                   params_list_refine,
                                   self.parser,
-                                  num_process=num_process)
+                                  num_process=num_process,
+                                  batch_func=batch_compare)
 
         params_mean, params_std = get_weighted_res(res_arr[:, :n_par].T,
                                                    res_arr[:, w_index],
@@ -1305,7 +1342,28 @@ class LogLinearEnergyPT(LogLinearKS):
     datasets, or pass ``chunk_size``/``chunk_iter`` to estimate each distance
     on sub-samples instead (see
     `raddest.reg.energy.energy_test`).
+
+    Parameters
+    ----------
+    xflow, yflow : FlowVI
+        Fitted x and y flows.
+    permutations : int, optional
+        Number of permutations per grid point. Default is 200.
+    chunk_size, chunk_iter : int or None, optional
+        Chunked-estimation options of `raddest.reg.energy.energy_test`
+        (numpy backend only). Default is None.
+    backend : {'numpy', 'jax'}, optional
+        Grid evaluation engine. ``'numpy'`` (default) evaluates the grid with
+        one joblib worker per point; ``'jax'`` evaluates the whole grid in
+        this process with vectorized permutations on the jax device (see
+        `raddest.reg.energy.construct_energy_compare_jax`) — this is where
+        GPU parallelism pays off, and it needs `func_x2y_jax` (provided).
+        `num_process` is ignored with the jax backend.
+    gen_new_grid : str, optional
+        Zoom-in grid regeneration scheme. Default is 'mean_std'.
     """
+
+    func_x2y_jax = staticmethod(loglinear_scatter_jax)
 
     def __init__(self,
                  xflow,
@@ -1313,14 +1371,25 @@ class LogLinearEnergyPT(LogLinearKS):
                  permutations=200,
                  chunk_size=None,
                  chunk_iter=None,
+                 backend='numpy',
                  gen_new_grid='mean_std'):
+
+        if backend not in ('numpy', 'jax'):
+            raise ValueError(f"backend must be 'numpy' or 'jax', not {backend}")
+        if backend == 'jax' and chunk_size is not None:
+            raise ValueError("chunked estimation is only available with the "
+                             "numpy backend")
 
         super().__init__(xflow, yflow, gen_new_grid=gen_new_grid)
 
+        self.backend = backend
         self.compare_constructor = partial(construct_energy_compare,
                                            permutations=permutations,
                                            chunk_size=chunk_size,
                                            chunk_iter=chunk_iter)
+        if backend == 'jax':
+            self.compare_batch_constructor = partial(
+                construct_energy_compare_jax, permutations=permutations, seed=0)
 
 
 class LogLinearEnergyGrad(RegressorEnergyGrad):
@@ -1331,11 +1400,6 @@ class LogLinearEnergyGrad(RegressorEnergyGrad):
     """
 
     def __init__(self, xflow, yflow):
-
-        @jit
-        def loglinear_scatter_jax(x, params, eps):
-            return jnp.power(
-                10, params[0] * jnp.log10(jnp.abs(x)) + params[1] + params[2] * eps)
 
         super().__init__(xflow,
                          yflow,

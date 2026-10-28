@@ -15,9 +15,21 @@ def get_weighted_res(xs, w, std_min=0.01):
     return np.array(_mean), np.array(_std)
 
 
-def grid_search(func, parmas, parser, num_process=10):
+def grid_search(func, parmas, parser, num_process=10, batch_func=None):
+    """Evaluate ``func`` on the full cartesian product of ``parmas``.
+
+    ``batch_func``, when given, replaces the per-point ``func`` calls: it
+    receives the whole grid as one ``(G, n_par)`` array and returns an
+    ``(G, n_out)`` array, one output row per grid point. This is the hook a
+    jax backend uses to evaluate the grid inside one process (no joblib
+    workers).
+    """
     iargs = list(itertools.product(*parmas))
-    res = Parallel(n_jobs=num_process)(delayed(func)(*args) for args in iargs)
+    if batch_func is None:
+        res = Parallel(n_jobs=num_process)(delayed(func)(*args) for args in iargs)
+    else:
+        params_grid = np.asarray(iargs, dtype=float)
+        res = list(map(tuple, batch_func(params_grid)))
     return parser(res, iargs)
 
 
@@ -31,9 +43,11 @@ def zoom_in_grid(func,
                  max_i=10,
                  rtol=1e-3,
                  atol=1e-3,
-                 verbose=False):
+                 verbose=False,
+                 batch_func=None):
     n_par = len(params)
-    res_arr = grid_search(func, params, parser, num_process=num_process)
+    res_arr = grid_search(func, params, parser, num_process=num_process,
+                          batch_func=batch_func)
     res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T,
                                          res_arr[:, w_index])
 
@@ -43,7 +57,8 @@ def zoom_in_grid(func,
     for _ in range(max_i):
 
         params = gen_new_grid(res_arr, n_par=n_par, w_index=w_index)
-        res_arr = grid_search(func, params, parser, num_process=num_process)
+        res_arr = grid_search(func, params, parser, num_process=num_process,
+                              batch_func=batch_func)
         res_mean_new, res_std_new = get_weighted_res(res_arr[:, :n_par].T,
                                                      res_arr[:, w_index])
         if verbose:

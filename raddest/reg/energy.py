@@ -6,16 +6,22 @@ It is zero if and only if the two samples come from the same distribution and
 grows with their separation, which makes it usable both as a two-sample test
 statistic and, being differentiable almost everywhere, as a fitting loss.
 
-Two flavors are provided for the two fitting optimizers:
+Three flavors are provided for the fitting optimizers:
 
 - :func:`energy_test` — a permutation test (numpy, jax-free) returning the test
   statistic and a p-value; used inside grid-search worker processes, where a
-  jax import would allocate a GPU context per worker.
+  jax import would allocate a GPU context per worker. With
+  ``chunk_size``/``chunk_iter`` each distance is estimated on sub-samples
+  (pted's chunked mode).
 - :func:`energy_distance_jax` — the differentiable jax energy distance used as
   an autodiff loss, plus :func:`construct_energy_loss`, which wires a
   differentiable conditional generator into that loss.
+- :func:`energy_test_jax` — the permutation test vectorized in jax (mask
+  quadratic form), plus :func:`construct_energy_compare_jax`, which evaluates
+  a whole parameter grid in one jax process — the GPU-parallel alternative to
+  the multiprocess numpy path.
 
-Both flavors are parity-tested against the ``pted`` package (see
+The flavors are parity-tested against the ``pted`` package (see
 ``test/test_energy.py``).
 """
 
@@ -296,6 +302,97 @@ def energy_test(
     return float(test_stat), float((1 + count) / (1 + permutations))
 
 
+def _permutation_masks(n: int,
+                       nx: int,
+                       permutations: int,
+                       seed: int) -> jax.Array:
+    """Membership masks of ``permutations`` pooled-sample permutations.
+
+    Row ``p`` is 1 where permutation ``p`` assigns the pooled point to the
+    first sample (size ``nx``) and 0 elsewhere, shape ``(permutations, n)``.
+    """
+    keys = jax.random.split(jax.random.PRNGKey(seed), permutations)
+    perms = jax.vmap(lambda k: jax.random.permutation(k, n))(keys)
+    return (perms < nx).astype(jnp.float32)
+
+
+def _masked_energy_stats(d: jax.Array, nx: int, masks: jax.Array) -> jax.Array:
+    """Energy distance of the observed split plus every permuted split.
+
+    Each statistic is computed from the pooled distance matrix ``d`` via the
+    mask quadratic form ``S_ab = sum_ij a_i d_ij b_j`` (one matmul for all
+    permutations at once), never by re-indexing the matrix.
+    """
+    n = d.shape[0]
+    ny = n - nx
+    m0 = jnp.concatenate([jnp.ones(nx, dtype=d.dtype),
+                          jnp.zeros(ny, dtype=d.dtype)])
+    eye_masks = jnp.concatenate([m0[None], masks], axis=0)
+
+    left = eye_masks @ d  # (1 + P, n)
+    s_xx = jnp.sum(left * eye_masks, axis=1)
+    s_xy = jnp.sum(left * (1.0 - eye_masks), axis=1)
+    s_yy = jnp.sum(d) - s_xx - 2 * s_xy
+    stats = 2 * s_xy / (nx * ny) - s_xx / nx**2 - s_yy / ny**2
+    return stats  # row 0: observed split; rows 1..: permuted splits
+
+
+def energy_test_jax(
+    x: ArrayLike,
+    y: ArrayLike,
+    *,
+    permutations: int = 200,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """Vectorized two-sample permutation test on the energy distance (jax).
+
+    Same statistic, permutation scheme, and p-value definition as
+    :func:`energy_test`, computed on the jax default device with the
+    permutations batched through a mask quadratic form instead of a python
+    loop over matrix re-indexing. Used by the jax backend of the energy
+    grid-search regressor; standalone use gives a fast single-pair test.
+
+    Parameters
+    ----------
+    x : array_like
+        First sample, shape ``(N, D)``.
+    y : array_like
+        Second sample, shape ``(M, D)``; ``D`` must match ``x``.
+    permutations : int, optional
+        Number of permutations. Default is 200.
+    seed : int, optional
+        Seed of the permutation draws. Default is 0.
+
+    Returns
+    -------
+    test_stat : float
+        Energy distance between ``x`` and ``y``.
+    p_value : float
+        One-tailed permutation p-value; small when the samples differ.
+    """
+    x = jnp.asarray(x, dtype=jnp.float32)
+    y = jnp.asarray(y, dtype=jnp.float32)
+    if x.ndim < 2 or y.ndim < 2:
+        raise ValueError(
+            f"x and y must be at least 2D (N, D), not {x.shape} and {y.shape}")
+    if x.shape[1:] != y.shape[1:]:
+        raise ValueError(
+            f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
+
+    @jax.jit
+    def run() -> jax.Array:
+        z = jnp.concatenate([x, y], axis=0)
+        d = _jax_cdist(z, z)
+        masks = _permutation_masks(z.shape[0], x.shape[0], permutations, seed)
+        stats = _masked_energy_stats(d, x.shape[0], masks)
+        count = jnp.sum(stats[1:] >= stats[0])
+        p_value = (1 + count) / (1 + permutations)
+        return jnp.stack([stats[0], p_value])
+
+    test_stat, p_value = run()
+    return float(test_stat), float(p_value)
+
+
 def construct_energy_compare(
     generator_cond: Callable,
     x_gen: np.ndarray,
@@ -364,6 +461,125 @@ def construct_energy_compare(
                            chunk_iter=chunk_iter)
 
     return energy_compare
+
+
+def construct_energy_compare_jax(
+    func_x2y_jax: Callable,
+    x_obs: np.ndarray,
+    y_obs: np.ndarray,
+    x_gen: np.ndarray,
+    x_obs_gen: np.ndarray,
+    y_kdt: np.ndarray,
+    y_err_kdt: np.ndarray,
+    *,
+    y_min: float | None = None,
+    y_max: float | None = None,
+    permutations: int = 200,
+    seed: int = 0,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Build a jax batch compare function for grid-search energy fitting.
+
+    The batch counterpart of :func:`construct_energy_compare`: instead of one
+    joblib worker per grid point (numpy, fresh noise per point), the whole
+    grid is evaluated inside one jax process — synthetic samples are
+    generated differentiably-style from fixed reparameterized noise draws
+    (exactly as in :func:`construct_energy_loss`), and the permutation test
+    of each grid point runs through the vectorized mask form of
+    :func:`energy_test_jax`. Grid points share one set of permutation draws
+    (common random numbers), which reduces the noise of comparing p-values
+    across the grid.
+
+    Running in a single process is what avoids the per-worker GPU-context
+    OOM of the multiprocess numpy backend; the parallelism comes from the
+    batched ``(P, n) @ (n, n)`` statistic matmuls on the device.
+
+    Parameters
+    ----------
+    func_x2y_jax : callable
+        Differentiable scatter function, ``func_x2y_jax(x, params, eps) ->
+        y_pred`` where ``eps`` is a fixed ``(N,)`` unit-normal draw carried in
+        the scatter the same way the model's intrinsic scatter parameter is.
+    x_obs : np.ndarray
+        Observed x values.
+    y_obs : np.ndarray
+        Observed y values.
+    x_gen : np.ndarray
+        Latent x draws used as generator input.
+    x_obs_gen : np.ndarray
+        Observed-side x values paired with the generated y values.
+    y_kdt : np.ndarray
+        y sample of the yflow, used for error matching.
+    y_err_kdt : np.ndarray
+        y error values paired with ``y_kdt``.
+    y_min : float or None, optional
+        Clip lower bound for the predicted y; the minimum of ``y_kdt`` when
+        None. Default is None.
+    y_max : float or None, optional
+        Clip upper bound for the predicted y; the maximum of ``y_kdt`` when
+        None. Default is None.
+    permutations : int, optional
+        Number of permutations per grid point. Default is 200.
+    seed : int, optional
+        Seed of the fixed noise draws and of the shared permutation masks.
+        Default is 0.
+
+    Returns
+    -------
+    callable
+        ``energy_compare_batch(params_grid) -> (G, 2)`` array of
+        ``(test_stat, p_value)`` rows, one per grid point.
+    """
+    if y_min is None:
+        y_min = float(np.min(y_kdt))
+    if y_max is None:
+        y_max = float(np.max(y_kdt))
+
+    rng = np.random.default_rng(seed)
+    eps_scatter = jnp.asarray(rng.standard_normal(len(x_gen)), dtype=jnp.float32)
+    eps_obs = jnp.asarray(rng.standard_normal(len(x_gen)), dtype=jnp.float32)
+
+    obs_2d = jnp.stack(
+        [jnp.asarray(x_obs, dtype=jnp.float32), jnp.asarray(y_obs, dtype=jnp.float32)],
+        axis=1,
+    )
+    x_gen_j = jnp.asarray(x_gen, dtype=jnp.float32)
+    x_obs_gen_j = jnp.asarray(x_obs_gen, dtype=jnp.float32)
+    y_kdt_j = jnp.asarray(y_kdt, dtype=jnp.float32)
+    y_err_kdt_j = jnp.asarray(y_err_kdt, dtype=jnp.float32)
+    y_fill = jnp.asarray(np.mean(y_kdt), dtype=jnp.float32)
+
+    masks = _permutation_masks(obs_2d.shape[0] + len(x_gen), len(x_gen),
+                               permutations, seed)
+
+    def _one_grid_point(params: jax.Array) -> jax.Array:
+        y_pred = func_x2y_jax(x_gen_j, params, eps_scatter)
+        y_pred = jnp.clip(y_pred, y_min, y_max)
+        y_pred = jnp.nan_to_num(y_pred, nan=y_fill)
+        y_err_matched = match_y_err_jax(y_pred, y_kdt_j, y_err_kdt_j)
+        y_obs_gen = y_pred + eps_obs * y_err_matched
+        gen_2d = jnp.stack([x_obs_gen_j, y_obs_gen], axis=1)
+        z = jnp.concatenate([gen_2d, obs_2d], axis=0)
+        d = _jax_cdist(z, z)
+        stats = _masked_energy_stats(d, len(x_gen), masks)
+        count = jnp.sum(stats[1:] >= stats[0])
+        p_value = (1 + count) / (1 + permutations)
+        return jnp.stack([stats[0], p_value])
+
+    # one jitted call evaluates the whole grid: lax.map walks the grid points
+    # sequentially on the device, so peak memory stays at one point's
+    # distance matrix and permutation intermediates.
+    run_grid = jax.jit(
+        lambda params_grid: jax.lax.map(_one_grid_point, params_grid))
+
+    def energy_compare_batch(params_grid: np.ndarray) -> np.ndarray:
+        params_grid = jnp.asarray(params_grid, dtype=jnp.float32)
+        if params_grid.ndim != 2:
+            raise ValueError(
+                f"params_grid must be 2D (G, n_par), not {params_grid.shape}")
+        res = run_grid(params_grid)
+        return np.asarray(res)
+
+    return energy_compare_batch
 
 
 def match_y_err_jax(

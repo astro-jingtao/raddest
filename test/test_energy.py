@@ -1,5 +1,7 @@
 
 
+import itertools
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -13,10 +15,12 @@ from raddest.reg.constructor import construct_generator_cond
 from raddest.reg.energy import (
     _energy_distance_u_jax,
     construct_energy_compare,
+    construct_energy_compare_jax,
     construct_energy_loss,
     energy_distance_jax,
     energy_distance_numpy,
     energy_test,
+    energy_test_jax,
     match_y_err_jax,
 )
 
@@ -221,6 +225,140 @@ class TestEnergyTestChunked:
             energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_size=50)
         with pytest.raises(ValueError, match='together'):
             energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_iter=5)
+
+
+class TestEnergyTestJax:
+    """The vectorized jax permutation test."""
+
+    def test_statistic_matches_numpy(self):
+        x, y = make_samples(shift=0.3)
+        stat_np, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(0))
+        stat_jax, _ = energy_test_jax(x, y, permutations=5)
+        assert stat_jax == pytest.approx(stat_np, rel=RTOL_JAX, abs=1e-4)
+        assert stat_jax == pytest.approx(energy_distance_numpy(x, y),
+                                         rel=RTOL_JAX,
+                                         abs=1e-4)
+
+    def test_same_distribution_gives_large_p(self):
+        x, y = make_samples(n_x=300, n_y=300)
+        _, p = energy_test_jax(x, y, permutations=200)
+        assert p > 0.05
+
+    def test_shifted_distribution_gives_smallest_p(self):
+        x, y = make_samples(n_x=300, n_y=300, shift=1.0)
+        _, p = energy_test_jax(x, y, permutations=200)
+        assert p == pytest.approx(1.0 / 201)
+
+    def test_seed_reproducible_and_statistic_seed_independent(self):
+        x, y = make_samples(shift=0.3)
+        res_0 = energy_test_jax(x, y, permutations=50, seed=0)
+        res_0_again = energy_test_jax(x, y, permutations=50, seed=0)
+        res_1 = energy_test_jax(x, y, permutations=50, seed=1)
+        assert res_0 == res_0_again
+        assert res_0[0] == pytest.approx(res_1[0], rel=RTOL_JAX, abs=1e-4)
+
+    def test_input_validation(self):
+        with pytest.raises(ValueError, match='at least 2D'):
+            energy_test_jax(np.zeros(10), np.zeros((10, 2)))
+        with pytest.raises(ValueError, match='feature shape'):
+            energy_test_jax(np.zeros((10, 2)), np.zeros((10, 3)))
+
+
+class TestConstructEnergyCompareJax:
+    """The batch grid compare closure (jax grid backend)."""
+
+    @staticmethod
+    def _make_inputs(n=200, seed=13):
+        rng = np.random.default_rng(seed)
+        x_gen = rng.uniform(1, 10, size=n)
+        x_obs_gen = x_gen + rng.normal(scale=0.1, size=n)
+        y_kdt = np.linspace(5, 50, 400)
+        y_err_kdt = np.full(400, 0.5)
+        x_obs = rng.uniform(1, 10, size=n)
+        y_obs = 3 * x_obs + 1 + rng.normal(scale=0.6, size=n)
+        return x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs
+
+    @staticmethod
+    def linear_jax(x, params, eps):
+        return params[0] * x + params[1] + params[2] * eps
+
+    def test_batch_rows_match_single_point_generation(self):
+        # replicate the closure's fixed-noise generation for one grid point
+        # and check the batch result against energy_test_jax on that sample
+        x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
+        seed = 0
+        compare = construct_energy_compare_jax(self.linear_jax,
+                                               x_obs,
+                                               y_obs,
+                                               x_gen,
+                                               x_obs_gen,
+                                               y_kdt,
+                                               y_err_kdt,
+                                               permutations=50,
+                                               seed=seed)
+        params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
+        res = compare(params)
+        assert res.shape == (2, 2)
+
+        rng = np.random.default_rng(seed)
+        eps_scatter = rng.standard_normal(len(x_gen))
+        eps_obs = rng.standard_normal(len(x_gen))
+        for i, p in enumerate(params):
+            y_pred = p[0] * x_gen + p[1] + p[2] * eps_scatter
+            y_pred = np.clip(y_pred, y_kdt.min(), y_kdt.max())
+            y_err_matched = y_err_kdt[np.argmin(np.abs(y_kdt[:, None] - y_pred[None, :]),
+                                                axis=0)]
+            y_obs_gen = y_pred + eps_obs * y_err_matched
+            gen = np.stack([x_obs_gen, y_obs_gen], axis=1)
+            obs = np.stack([x_obs, y_obs], axis=1)
+            stat, pval = energy_test_jax(gen, obs, permutations=50, seed=seed)
+            assert res[i, 0] == pytest.approx(stat, rel=RTOL_JAX, abs=1e-4)
+            assert res[i, 1] == pytest.approx(pval, rel=1e-6)
+
+    def test_good_params_smaller_statistic_and_larger_p(self):
+        x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
+        compare = construct_energy_compare_jax(self.linear_jax,
+                                               x_obs,
+                                               y_obs,
+                                               x_gen,
+                                               x_obs_gen,
+                                               y_kdt,
+                                               y_err_kdt,
+                                               permutations=50)
+        params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
+        stat_good, p_good = compare(params[[0]])[0]
+        stat_bad, p_bad = compare(params[[1]])[0]
+        assert stat_good < stat_bad
+        assert p_good > p_bad
+
+    def test_grid_of_points_runs(self):
+        x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
+        compare = construct_energy_compare_jax(self.linear_jax,
+                                               x_obs,
+                                               y_obs,
+                                               x_gen,
+                                               x_obs_gen,
+                                               y_kdt,
+                                               y_err_kdt,
+                                               permutations=20)
+        grid = np.array(list(itertools.product([2.8, 3.0, 3.2], [0.5, 1.0],
+                                               [0.3, 0.6])))
+        res = compare(grid)
+        assert res.shape == (12, 2)
+        assert np.all((res[:, 1] > 0) & (res[:, 1] <= 1))
+
+    def test_invalid_grid_shape_raises(self):
+        x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
+        compare = construct_energy_compare_jax(self.linear_jax,
+                                               x_obs,
+                                               y_obs,
+                                               x_gen,
+                                               x_obs_gen,
+                                               y_kdt,
+                                               y_err_kdt,
+                                               permutations=20)
+        with pytest.raises(ValueError, match='must be 2D'):
+            compare(np.array([3.0, 1.0, 0.6]))
 
 
 class TestMatchYErrJax:

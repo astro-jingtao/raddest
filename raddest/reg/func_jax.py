@@ -28,6 +28,18 @@ def saturated_linear_smooth_jax(x, k, b, x0, x1, c0, c1, width=0.01):
     return y_smooth
 
 
+@jit
+def loglinear_scatter_jax(x, params, eps):
+    """Jax twin of ``raddest.reg.ks.loglinear_scatter`` with the intrinsic
+    scatter injected as a fixed unit-normal draw ``eps`` (reparameterization).
+
+    ``params = (k, b, sig)``:
+    ``y = 10^(k * log10(x) + b + sig * eps)``.
+    """
+    return jnp.power(10, params[0] * jnp.log10(jnp.abs(x)) + params[1] +
+                     params[2] * eps)
+
+
 def generate_piecewise_linear_jax(n):
 
     @jit

@@ -56,14 +56,16 @@ def fitted_regressors():
     yflow = fit_tiny_flow(y_obs, y_err)
 
     regressor_pt = LogLinearEnergyPT(xflow, yflow, permutations=50)
+    regressor_pt_jax = LogLinearEnergyPT(xflow, yflow, permutations=50,
+                                         backend='jax')
     regressor_grad = LogLinearEnergyGrad(xflow, yflow)
-    return regressor_pt, regressor_grad, x_obs, x_err, y_obs, y_err
+    return regressor_pt, regressor_pt_jax, regressor_grad, x_obs, x_err, y_obs, y_err
 
 
 class TestLogLinearEnergyPT:
 
     def test_fit_recovers_params(self, fitted_regressors):
-        regressor_pt, _, x_obs, _, y_obs, _ = fitted_regressors
+        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
 
         params_list = [
             np.linspace(1.0, 3.0, 4),
@@ -86,7 +88,7 @@ class TestLogLinearEnergyPT:
         assert abs(params_mean[2] - TRUE_PARAMS['sig']) < 0.15
 
     def test_energy_test_prefers_true_params(self, fitted_regressors):
-        regressor_pt, _, x_obs, _, y_obs, _ = fitted_regressors
+        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
         np.random.seed(1)
 
         _, p_good = regressor_pt.energy_test(
@@ -106,10 +108,79 @@ class TestLogLinearEnergyPT:
         assert p_good > p_bad
 
 
+class TestLogLinearEnergyPTJaxBackend:
+
+    def test_fit_recovers_params(self, fitted_regressors):
+        _, regressor_pt_jax, _, x_obs, _, y_obs, _ = fitted_regressors
+
+        params_list = [
+            np.linspace(1.0, 3.0, 4),
+            np.linspace(-0.5, 1.5, 4),
+            np.linspace(0.05, 0.2, 3),
+        ]
+
+        params_mean, params_std, res_arr = regressor_pt_jax.fit(x_obs,
+                                                                y_obs,
+                                                                params_list=params_list,
+                                                                N=300,
+                                                                num_process=1,
+                                                                max_i=1,
+                                                                refine=False)
+
+        assert res_arr.shape[1] == 5
+        assert np.all(params_std >= 0)
+        assert abs(params_mean[0] - TRUE_PARAMS['k']) < 0.6
+        assert abs(params_mean[1] - TRUE_PARAMS['b']) < 0.6
+        assert abs(params_mean[2] - TRUE_PARAMS['sig']) < 0.15
+
+    def test_results_match_numpy_backend(self, fitted_regressors):
+        # both backends weight the same grid; the jax backend uses fixed noise
+        # draws per grid point, the numpy backend re-draws, so the weighted
+        # means agree only statistically — assert the shared best grid point.
+        regressor_pt, regressor_pt_jax, _, x_obs, _, y_obs, _ = fitted_regressors
+        params_list = [
+            np.linspace(1.0, 3.0, 4),
+            np.linspace(-0.5, 1.5, 4),
+            np.linspace(0.05, 0.2, 3),
+        ]
+        _, _, res_np = regressor_pt.fit(x_obs,
+                                        y_obs,
+                                        params_list=params_list,
+                                        N=300,
+                                        num_process=2,
+                                        max_i=0,
+                                        refine=False)
+        _, _, res_jax = regressor_pt_jax.fit(x_obs,
+                                             y_obs,
+                                             params_list=params_list,
+                                             N=300,
+                                             max_i=0,
+                                             refine=False)
+        # the two backends agree statistically: their best grid points are
+        # neighbors (at most one grid step apart per axis)
+        i_np = np.argmax(res_np[:, 4])
+        i_jax = np.argmax(res_jax[:, 4])
+        idx_np = np.array([np.argmin(np.abs(g - res_np[i_np, j]))
+                           for j, g in enumerate(params_list)])
+        idx_jax = np.array([np.argmin(np.abs(g - res_jax[i_jax, j]))
+                            for j, g in enumerate(params_list)])
+        np.testing.assert_array_less(np.abs(idx_np - idx_jax),
+                                     np.full(3, 1.5))
+
+    def test_invalid_backend_and_chunk_combination(self, fitted_regressors):
+        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
+        xflow, yflow = regressor_pt.xflow, regressor_pt.yflow
+        with pytest.raises(ValueError, match="must be 'numpy' or 'jax'"):
+            LogLinearEnergyPT(xflow, yflow, backend='gpu')
+        with pytest.raises(ValueError, match='numpy backend'):
+            LogLinearEnergyPT(xflow, yflow, chunk_size=50, chunk_iter=5,
+                              backend='jax')
+
+
 class TestLogLinearEnergyGrad:
 
     def test_fit_decreases_loss_and_moves_toward_truth(self, fitted_regressors):
-        _, regressor_grad, x_obs, _, y_obs, _ = fitted_regressors
+        _, _, regressor_grad, x_obs, _, y_obs, _ = fitted_regressors
 
         params_0 = jnp.asarray([1.5, 0.0, 0.2], dtype=jnp.float32)
         params_hat, loss_history = regressor_grad.fit(x_obs,

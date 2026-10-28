@@ -78,6 +78,42 @@ class TestGridSearch:
         assert 'max iteration reached' in capsys.readouterr().out
 
 
+class TestGridSearchBatch:
+    """The batch_func evaluation hook (jax grid backend)."""
+
+    @staticmethod
+    def quad_batch(params_grid):
+        # vectorized twin of quad_compare over grid rows
+        k, b, c = params_grid[:, 0], params_grid[:, 1], params_grid[:, 2]
+        r = (k - 2)**2 + (b - 1)**2 + (c - 0.5)**2
+        return np.stack([r, np.exp(-10 * r)], axis=1)
+
+    def test_grid_search_batch_matches_pointwise(self):
+        params = [np.linspace(1, 3, 3), np.linspace(0, 2, 3),
+                  np.linspace(0, 1, 2)]
+        res_point = grid_search(quad_compare, params, parser, num_process=2)
+        res_batch = grid_search(quad_compare,
+                                params,
+                                parser,
+                                batch_func=self.quad_batch)
+        np.testing.assert_allclose(res_batch, res_point)
+
+    def test_zoom_in_grid_batch_converges(self):
+        params = [np.linspace(1, 3, 3), np.linspace(0, 2, 3),
+                  np.linspace(0, 1, 2)]
+        res_arr = zoom_in_grid(quad_compare,
+                               params,
+                               4,
+                               parser,
+                               gen_new_grid_mean_std,
+                               lambda m, s: None,
+                               max_i=3,
+                               batch_func=self.quad_batch)
+        best = res_arr[np.argmax(res_arr[:, 4])]
+        assert best[0] == pytest.approx(2.0, abs=0.1)
+        assert best[1] == pytest.approx(1.0, abs=0.1)
+
+
 class TestGenNewGrid:
 
     def test_mean_std_scalars_and_lists(self):
