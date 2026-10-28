@@ -122,7 +122,7 @@ def gen_new_grid_quantile(res_arr,
         d_par_min = [d_par_min] * n_par
 
     if range_par is None:
-        range_par = [[-np.inf, np.inf] * n_par]
+        range_par = [[-np.inf, np.inf] for _ in range(n_par)]
 
     new_list = []
 

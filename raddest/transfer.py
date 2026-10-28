@@ -306,9 +306,9 @@ def _jac_combined(x, x_err, params, jac_1, jac_2, trans_1, n_1):
 
 
 def _params_estimator_combined(x, x_err, est_1, est_2, trans_1):
-    p1 = est_1(x, x_err)
+    p1 = jnp.asarray(est_1(x, x_err))
     u1, v1 = trans_1(x, x_err, p1)
-    p2 = est_2(u1, v1)
+    p2 = jnp.asarray(est_2(u1, v1))
     return jnp.concatenate([p1, p2])
 
 

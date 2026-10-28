@@ -7,12 +7,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from raddest.api.fitter import (LogLinearEnergyGrad, LogLinearEnergyPT,
-                                RegressorEnergyGrad)
+from raddest.api.fitter import LogLinearEnergyGrad, LogLinearEnergyPT, RegressorEnergyGrad
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
 
-TRUE_PARAMS = dict(k=2.0, b=0.5, sig=0.1)
+TRUE_PARAMS = {'k': 2.0, 'b': 0.5, 'sig': 0.1}
 
 
 def make_obs_data(n=400, seed=42):

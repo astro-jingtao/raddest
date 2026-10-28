@@ -32,6 +32,14 @@ class TestPackagedSkill:
         assert f'name: {self.SKILL_NAME}' in frontmatter
         assert 'description:' in frontmatter
 
+    def test_main_module_in_process(self, capsys):
+        # imported inside the test: the module prints on import, which must
+        # happen under capsys, not at collection time
+        import raddest.skills.__main__  # noqa: PLC0415
+
+        out = capsys.readouterr().out
+        assert 'Deployment guide' in out
+
     def test_discovery_entry(self):
         repo_root = Path(raddest.__file__).parent.parent
         env = dict(os.environ)

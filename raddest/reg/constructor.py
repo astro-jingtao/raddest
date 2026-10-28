@@ -170,7 +170,7 @@ def piecewise_linear_step_factory(n_piece, A_eq=None, b_eq=None):
     if A_eq is not None:
         A_eq = jnp.asarray(A_eq)
         if b_eq is None:
-            b_eq = jnp.zeros(A_eq.shape[1])
+            b_eq = jnp.zeros(A_eq.shape[0])
         else:
             b_eq = jnp.asarray(b_eq)
     else:

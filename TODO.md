@@ -4,7 +4,8 @@ Deferred `ruff` findings (config: `ruff.toml`, introduced with the ruff setup). 
 
 ## Bugs (fix first)
 
-- `raddest/api/fitter.py` — `F821`: `PiecewiseLogLinearStudentTML.__init__` references `piecewise_linear_studentT_step_factory`, which does not exist anywhere in the codebase; instantiating the class raises `NameError`. The class is marked `# TODO: to implement` — either implement the student-T piecewise step factory or remove the class until it exists.
+- `raddest/api/fitter.py` — `F821`: `PiecewiseLogLinearStudentTML.__init__` references `piecewise_linear_studentT_step_factory`, which does not exist anywhere in the codebase; instantiating the class raises `NameError`. The class is marked `# TODO: to implement` — either implement the student-T piecewise step factory or remove the class until it exists. Its method bodies are excluded from coverage for exactly this reason.
+- `raddest/interpolator.py` — `MyPchipInterpolator.__init__` calls `get_inverse_coefficients_breakpoints`, which does not exist anywhere; the class cannot be instantiated, so `transform`/`inverse_transform`/`diff`/`from_params` are unreachable. Either implement the inverse-coefficients construction (nontrivial for a PPoly) or drop the module; its bodies are excluded from coverage for this reason.
 - `raddest/api/flowvi.py` — `B008`: `FlowVI.fit` evaluates `optax.adam(1e-3)` in the default argument, once at import time; a stale shared optimizer state is reused across calls. Move the call into the function body or a module-level singleton.
 - `raddest/tools.py` — `F401`: `jax.jit` imported but unused.
 - `test/test_hyperplane_projection.py` — `F401`: `pytest` imported but unused.
