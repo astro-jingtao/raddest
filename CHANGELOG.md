@@ -1,12 +1,14 @@
 # Change Log
 
-## [unreleased]
+## 0.10.0 - 2026-10-29
 
 ### Added
 
 - JAX grid backend for energy-test fitting: `LogLinearEnergyPT(backend='jax')` evaluates the whole parameter grid in a single jax process with vectorized permutations, instead of one worker process per grid point; the numpy backend remains the default. `raddest.reg.energy.energy_test_jax` exposes the vectorized test on its own.
 - Chunked estimation for the energy test (`chunk_size`/`chunk_iter` in `energy_test`, `construct_energy_compare` and `LogLinearEnergyPT`): each energy distance is estimated on random sub-samples, mirroring `pted`'s chunked mode, for large samples.
 - `RegressorEnergyPT` grid-search strategy class; `LogLinearEnergyPT` now composes it (no longer a `LogLinearKS` subclass; constructor unchanged).
+- Energy-distance fitting methods: grid search on energy-test p-values (`LogLinearEnergyPT`) and gradient descent on the energy distance (`LogLinearEnergyGrad`), with `energy_test` evaluation on `RegressorBase`.
+- A Claude Agent Skill (`raddest-regression`) shipped as package data; `python -m raddest.skills` prints the deployment guide.
 - Example notebook `example/fit_loglinear_energy.ipynb` covering both energy optimizers and both grid backends.
 - GitHub Actions CI running the fast test subset (`pytest -m "not slow"`) on ubuntu/macos/windows; heavy end-to-end fitting tests carry the `slow` marker.
 - `--cuda-device` pytest option selecting the test GPU (default `0`, comma lists allowed).
@@ -16,9 +18,6 @@
 - `get_shift` accepts `'histogram'` (the previous `'histgram'` spelling is removed) and raises `ValueError` for unknown methods instead of returning `None`.
 - `FlowVI.fit` builds its default `optax.adam(1e-3)` optimizer per call (previously a single optimizer created at import time was silently reused).
 - Notebooks are normalized by nbstripout on `git add`: code and outputs are kept, metadata and execution counts are stripped.
-
-### Fixed
-
 - Deal with jax array in `shrink_data`
 - Fix import error in example notebook
 
