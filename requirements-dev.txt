@@ -1,0 +1,7 @@
+# Development and test dependencies (not needed to install or use raddest).
+# pted is the reference implementation the energy-distance parity tests run
+# against (raddest/reg/energy.py).
+pytest
+pytest-cov
+ruff
+pted

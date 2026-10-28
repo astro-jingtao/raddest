@@ -30,5 +30,5 @@ Deferred `ruff` findings (config: `ruff.toml`, introduced with the ruff setup). 
 
 - Missing type annotations (`ANN001`/`ANN201`/`ANN202`/`ANN204`/`ANN206`): ~1100 findings across the package — a full annotation pass.
 - Missing docstrings (`D100`-`D107`, `D102` methods): ~170 findings.
-- Wide signatures (`PLR0913`/`PLR0917`, >8 args / >5 positional): ~70 findings across `reg/ks.py`, `x_xerr.py`, `api/fitter.py`, `api/flowvi.py`, `grid_search.py`, `reg/map.py`, `reg/func*.py`, `shrink.py`, `tools.py`, `transfer.py` — most call sites are internal constructors; converting trailing parameters to keyword-only is an API-visible change and should be done module by module.
+- Wide signatures (`PLR0913`/`PLR0917`, >8 args / >5 positional): ~70 findings across `reg/ks.py`, `x_xerr.py`, `api/fitter.py`, `api/flowvi.py`, `grid_search.py`, `reg/map.py`, `reg/func*.py`, `shrink.py`, `tools.py`, `transfer.py`, `reg/energy.py` — most call sites are internal constructors; converting trailing parameters to keyword-only is an API-visible change and should be done module by module.
 - Complex functions (`C901`, `PLR0912`, `PLR0915`): `reg/map.py:get_xyw_trans` (complexity 19, 28 branches, 96 statements) and `shrink.py:shrink_data` (complexity 17, 17 branches) — decompose when next touched.
