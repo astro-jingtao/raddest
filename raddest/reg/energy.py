@@ -142,11 +142,81 @@ def energy_distance_numpy(x: np.ndarray, y: np.ndarray) -> float:
     return float(2 * e_xy - e_xx - e_yy)
 
 
+def _energy_test_full(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    permutations: int,
+    rng: np.random.Generator,
+) -> tuple[float, int]:
+    """Full-sample permutation loop on the precomputed pooled distance matrix.
+
+    Returns the observed statistic and the number of permuted statistics at
+    least as large.
+    """
+    nx = len(x)
+    n_all = z.shape[0]
+    d = cdist(z, z)
+
+    def stat_from_matrix(d_matrix: np.ndarray) -> float:
+        e_xx = d_matrix[:nx, :nx].sum() / nx**2
+        e_yy = d_matrix[nx:, nx:].sum() / (n_all - nx) ** 2
+        e_xy = d_matrix[:nx, nx:].sum() / (nx * (n_all - nx))
+        return 2 * e_xy - e_xx - e_yy
+
+    test_stat = stat_from_matrix(d)
+    count = 0
+    for _ in range(permutations):
+        idx = rng.permutation(n_all)
+        if stat_from_matrix(d[idx][:, idx]) >= test_stat:
+            count += 1
+    return test_stat, count
+
+
+def _energy_test_chunked(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    permutations: int,
+    rng: np.random.Generator,
+    *,
+    chunk_size: int,
+    chunk_iter: int,
+) -> tuple[float, int]:
+    """Chunked permutation loop: every statistic is estimated on sub-samples.
+
+    Follows ``pted.utils.pted_chunk_numpy``: each estimate averages
+    ``chunk_iter`` energy distances of random ``chunk_size`` sub-samples, and
+    each permutation shuffles the pooled sample before re-estimating.
+    """
+    nx = len(x)
+    n_all = z.shape[0]
+
+    def chunk_estimate(a: np.ndarray, b: np.ndarray) -> float:
+        est = 0.0
+        for _ in range(chunk_iter):
+            idx_a = rng.choice(len(a), size=min(len(a), chunk_size), replace=False)
+            idx_b = rng.choice(len(b), size=min(len(b), chunk_size), replace=False)
+            est += energy_distance_numpy(a[idx_a], b[idx_b])
+        return est / chunk_iter
+
+    test_stat = chunk_estimate(x, y)
+    count = 0
+    for _ in range(permutations):
+        zp = z[rng.permutation(n_all)]
+        if chunk_estimate(zp[:nx], zp[nx:]) >= test_stat:
+            count += 1
+    return test_stat, count
+
+
 def energy_test(
     x: ArrayLike,
     y: ArrayLike,
     permutations: int = 200,
     rng: np.random.Generator | None = None,
+    *,
+    chunk_size: int | None = None,
+    chunk_iter: int | None = None,
 ) -> tuple[float, float]:
     """Two-sample permutation test on the energy distance (numpy, jax-free).
 
@@ -154,6 +224,14 @@ def energy_test(
     re-indexes it, following the same algorithm as ``pted.pted`` with
     ``two_tailed=False``: the p-value is the right-tail fraction
     ``(1 + #{permuted stats >= observed stat}) / (1 + permutations)``.
+
+    With ``chunk_size``/``chunk_iter`` given, each energy distance (observed
+    and permuted) is instead *estimated* on random sub-samples of
+    ``chunk_size`` points per sample, averaged over ``chunk_iter`` draws —
+    the chunked mode of ``pted`` (``pted_chunk_numpy``), useful for large
+    samples: the per-estimate cost drops from O(n^2) to
+    O(chunk_size^2 * chunk_iter). The permutation test stays exact; only its
+    sensitivity to the difference between the samples decreases.
 
     Parameters
     ----------
@@ -167,6 +245,13 @@ def energy_test(
     rng : numpy.random.Generator, optional
         Generator used for the permutations. A fresh default generator is used
         when None. Default is None.
+    chunk_size : int or None, optional
+        Number of points per sub-sample in chunked estimation; must be given
+        together with ``chunk_iter``, and left as None for the full-sample
+        computation. Default is None.
+    chunk_iter : int or None, optional
+        Number of chunked estimates averaged per energy distance. Default is
+        None.
 
     Returns
     -------
@@ -187,27 +272,26 @@ def energy_test(
         )
     if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
         raise ValueError("Input contains NaN or Inf")
+    if (chunk_size is None) != (chunk_iter is None):
+        raise ValueError(
+            "chunk_size and chunk_iter must be given together for chunked "
+            "estimation, or both left as None")
 
     if rng is None:
         rng = np.random.default_rng()
 
-    nx = len(x)
     z = np.concatenate((x, y), axis=0)
-    d = cdist(z, z)
 
-    def stat_from_matrix(d_matrix: np.ndarray) -> float:
-        e_xx = d_matrix[:nx, :nx].sum() / nx**2
-        e_yy = d_matrix[nx:, nx:].sum() / (z.shape[0] - nx) ** 2
-        e_xy = d_matrix[:nx, nx:].sum() / (nx * (z.shape[0] - nx))
-        return 2 * e_xy - e_xx - e_yy
-
-    test_stat = stat_from_matrix(d)
-    n_all = z.shape[0]
-    count = 0
-    for _ in range(permutations):
-        idx = rng.permutation(n_all)
-        if stat_from_matrix(d[idx][:, idx]) >= test_stat:
-            count += 1
+    if chunk_size is None:
+        test_stat, count = _energy_test_full(x, y, z, permutations, rng)
+    else:
+        test_stat, count = _energy_test_chunked(x,
+                                                y,
+                                                z,
+                                                permutations,
+                                                rng,
+                                                chunk_size=chunk_size,
+                                                chunk_iter=chunk_iter)
 
     return float(test_stat), float((1 + count) / (1 + permutations))
 
@@ -221,6 +305,9 @@ def construct_energy_compare(
     x_obs: np.ndarray,
     y_obs: np.ndarray,
     permutations: int = 200,
+    *,
+    chunk_size: int | None = None,
+    chunk_iter: int | None = None,
 ) -> Callable[..., tuple[float, float]]:
     """Build a grid-search compare function based on the energy test.
 
@@ -250,6 +337,12 @@ def construct_energy_compare(
         Observed y values.
     permutations : int, optional
         Number of permutations per grid point. Default is 200.
+    chunk_size : int or None, optional
+        Chunked-estimation sub-sample size per :func:`energy_test`;
+        full-sample computation when None. Default is None.
+    chunk_iter : int or None, optional
+        Chunked-estimation iterations per :func:`energy_test`. Default is
+        None.
 
     Returns
     -------
@@ -264,7 +357,11 @@ def construct_energy_compare(
     def energy_compare(*params: float) -> tuple[float, float]:
         _, _, y_obs_gen = generator_cond(x_gen, y_kdt, y_err_kdt, params)
         gen = np.stack([x_obs_gen, np.asarray(y_obs_gen, dtype=float)], axis=1)
-        return energy_test(gen, obs, permutations=permutations)
+        return energy_test(gen,
+                           obs,
+                           permutations=permutations,
+                           chunk_size=chunk_size,
+                           chunk_iter=chunk_iter)
 
     return energy_compare
 

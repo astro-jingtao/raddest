@@ -4,9 +4,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from pted import pted as pted_fn
+from pted.utils import pted_chunk_numpy
 import pytest
 from scipy.spatial import KDTree
 
+from raddest.reg import energy
 from raddest.reg.constructor import construct_generator_cond
 from raddest.reg.energy import (
     _energy_distance_u_jax,
@@ -127,6 +129,100 @@ class TestEnergyTest:
             energy_test(np.full((10, 2), np.nan), np.zeros((10, 2)))
 
 
+class TestEnergyTestChunked:
+    """Chunked estimation mode (pted's chunk_size/chunk_iter)."""
+
+    # Tolerances calibrated above the measured Monte-Carlo noise floor of the
+    # chunk estimator (c=100, I=10 on n=200/150: bias ~+0.02, std ~0.016,
+    # max observed |chunk - full| = 0.046).
+    ABS_CHUNK_VS_FULL = 0.09
+    ABS_CHUNK_VS_PTED = 0.1
+
+    def test_chunk_covering_sample_reproduces_full_statistic(self):
+        # With chunk_size >= max(N, M) and chunk_iter=1 every draw uses the
+        # whole sample, so the estimate is exactly the full-sample statistic.
+        x, y = make_samples(shift=0.3)
+        stat_full, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(3))
+        stat_cover, _ = energy_test(x,
+                                    y,
+                                    permutations=5,
+                                    rng=np.random.default_rng(3),
+                                    chunk_size=500,
+                                    chunk_iter=1)
+        # not bitwise: the pooled-matrix sum and the per-chunk sums add the
+        # same distances in a different order
+        assert stat_cover == pytest.approx(stat_full, rel=RTOL_NUMPY)
+
+    def test_chunk_stat_close_to_full_statistic(self):
+        x, y = make_samples(shift=0.3)
+        stat_full, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(3))
+        stat_chunk, _ = energy_test(x,
+                                    y,
+                                    permutations=5,
+                                    rng=np.random.default_rng(3),
+                                    chunk_size=100,
+                                    chunk_iter=10)
+        assert stat_chunk == pytest.approx(stat_full, abs=self.ABS_CHUNK_VS_FULL)
+
+    def test_chunk_matches_pted_chunk_algorithm(self):
+        x, y = make_samples(shift=0.3)
+        stat_ours, _ = energy_test(x,
+                                   y,
+                                   permutations=5,
+                                   rng=np.random.default_rng(3),
+                                   chunk_size=100,
+                                   chunk_iter=10)
+        stat_pted, _ = pted_chunk_numpy(x,
+                                        y,
+                                        permutations=5,
+                                        chunk_size=100,
+                                        chunk_iter=10)
+        # Both are Monte-Carlo estimates of the same expected chunk statistic
+        # (bias included); the tolerance covers the two independent noise.
+        assert stat_ours == pytest.approx(stat_pted, abs=self.ABS_CHUNK_VS_PTED)
+
+    def test_chunk_retains_discriminating_power(self):
+        x_same, y_same = make_samples(n_x=300, n_y=300)
+        _, p_same = energy_test(x_same,
+                                y_same,
+                                permutations=100,
+                                rng=np.random.default_rng(0),
+                                chunk_size=100,
+                                chunk_iter=10)
+        assert p_same > 0.05
+        x_shift, y_shift = make_samples(n_x=300, n_y=300, shift=1.0)
+        _, p_shift = energy_test(x_shift,
+                                 y_shift,
+                                 permutations=100,
+                                 rng=np.random.default_rng(0),
+                                 chunk_size=100,
+                                 chunk_iter=10)
+        assert p_shift < 0.05
+
+    def test_chunk_deterministic_given_rng(self):
+        x, y = make_samples(shift=0.3)
+        res1 = energy_test(x,
+                           y,
+                           permutations=10,
+                           rng=np.random.default_rng(11),
+                           chunk_size=50,
+                           chunk_iter=5)
+        res2 = energy_test(x,
+                           y,
+                           permutations=10,
+                           rng=np.random.default_rng(11),
+                           chunk_size=50,
+                           chunk_iter=5)
+        assert res1 == res2
+
+    def test_chunk_args_must_be_given_together(self):
+        x, y = make_samples(shift=0.3)
+        with pytest.raises(ValueError, match='together'):
+            energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_size=50)
+        with pytest.raises(ValueError, match='together'):
+            energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_iter=5)
+
+
 class TestMatchYErrJax:
 
     def test_matches_kdtree(self):
@@ -191,6 +287,40 @@ class TestConstructEnergyCompare:
         assert isinstance(stat, float)
         assert isinstance(p, float)
         assert 0 < p <= 1
+
+    def test_chunk_kwargs_reach_the_test(self, monkeypatch):
+        x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
+        gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
+                                            params[1])
+        compare_chunk = construct_energy_compare(gen_cond,
+                                                 x_gen,
+                                                 x_gen,
+                                                 y_kdt,
+                                                 y_err_kdt,
+                                                 x_obs,
+                                                 y_obs,
+                                                 permutations=20,
+                                                 chunk_size=100,
+                                                 chunk_iter=10)
+        stat, p = compare_chunk(3.0, 1.0)
+        assert isinstance(stat, float)
+        assert 0 < p <= 1
+        # the generator draws a fresh synthetic sample per call, so plumbing
+        # is proven by spying on energy_test rather than by value comparison
+        calls = {}
+        real_energy_test = energy.energy_test
+
+        def spy(x, y, **kwargs):
+            calls.update(kwargs)
+            return real_energy_test(x, y, **kwargs)
+
+        monkeypatch.setattr(energy, 'energy_test', spy)
+        compare_chunk(3.0, 1.0)
+        assert calls == {
+            'permutations': 20,
+            'chunk_size': 100,
+            'chunk_iter': 10
+        }
 
 
 class TestConstructEnergyLoss:

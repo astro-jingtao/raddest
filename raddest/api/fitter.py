@@ -1302,15 +1302,25 @@ class LogLinearEnergyPT(LogLinearKS):
     synthetic sample is generated and its energy distance to the observed
     sample is converted to a p-value, which weights the grid. Each grid point
     costs O((N + M)^2 * permutations); reduce N or `permutations` for large
-    datasets.
+    datasets, or pass ``chunk_size``/``chunk_iter`` to estimate each distance
+    on sub-samples instead (see
+    `raddest.reg.energy.energy_test`).
     """
 
-    def __init__(self, xflow, yflow, permutations=200, gen_new_grid='mean_std'):
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 permutations=200,
+                 chunk_size=None,
+                 chunk_iter=None,
+                 gen_new_grid='mean_std'):
 
         super().__init__(xflow, yflow, gen_new_grid=gen_new_grid)
 
         self.compare_constructor = partial(construct_energy_compare,
-                                           permutations=permutations)
+                                           permutations=permutations,
+                                           chunk_size=chunk_size,
+                                           chunk_iter=chunk_iter)
 
 
 class LogLinearEnergyGrad(RegressorEnergyGrad):
