@@ -1031,6 +1031,15 @@ class RegressorKS(RegressorBase):
             grid point, with parameter values and their associated KS statistic and p-value.
         """
 
+        if self.backend == 'jax':
+            if self.compare_batch_constructor is None:
+                raise ValueError(f"{type(self).__name__} defines no jax grid "
+                                 "backend; fit with backend='numpy'.")
+            if getattr(self, 'func_x2y_jax', None) is None:
+                raise ValueError(f"{type(self).__name__} provides no "
+                                 "func_x2y_jax; the jax grid backend needs a "
+                                 "differentiable scatter function.")
+
         gen_new_grid_kwargs = self._set_gen_new_grid_kwargs(
             gen_new_grid_kwargs)
 
@@ -1065,13 +1074,6 @@ class RegressorKS(RegressorBase):
 
         batch_compare = None
         if self.backend == 'jax':
-            if self.compare_batch_constructor is None:
-                raise ValueError(f"{type(self).__name__} defines no jax grid "
-                                 "backend; fit with backend='numpy'.")
-            if not hasattr(self, 'func_x2y_jax'):
-                raise ValueError(f"{type(self).__name__} provides no "
-                                 "func_x2y_jax; the jax grid backend needs a "
-                                 "differentiable scatter function.")
             batch_compare = self.compare_batch_constructor(
                 self.func_x2y_jax,
                 x_obs,
@@ -1121,7 +1123,25 @@ class RegressorKS(RegressorBase):
         return params_mean, params_std, res_arr
 
 
-class LogLinearKS(RegressorKS):
+class _PositiveSigmaGridMixin:
+    """Zoom-in grid defaults for models whose third parameter is a
+    non-negative scatter: the sigma axis never zooms below 0."""
+
+    _range_par = [[-np.inf, np.inf], [-np.inf, np.inf], [0, np.inf]]
+
+    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+        grid_kwargs = super()._set_gen_new_grid_kwargs(gen_new_grid_kwargs)
+        grid_kwargs.setdefault('range_par', self._range_par)
+        return grid_kwargs
+
+    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+        grid_kwargs = super()._set_gen_new_grid_refine_kwargs(
+            gen_new_grid_refine_kwargs)
+        grid_kwargs.setdefault('range_par', self._range_par)
+        return grid_kwargs
+
+
+class LogLinearKS(_PositiveSigmaGridMixin, RegressorKS):
 
     def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
 
@@ -1132,29 +1152,8 @@ class LogLinearKS(RegressorKS):
                          print_mean_std=print_mean_std_loglinear,
                          gen_new_grid=gen_new_grid)
 
-    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
-        gen_new_grid_kwargs = super()._set_gen_new_grid_kwargs(
-            gen_new_grid_kwargs)
 
-        if 'range_par' not in gen_new_grid_kwargs:
-            gen_new_grid_kwargs['range_par'] = [[-np.inf, np.inf],
-                                                [-np.inf, np.inf], [0, np.inf]]
-
-        return gen_new_grid_kwargs
-
-    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
-        gen_new_grid_refine_kwargs = super()._set_gen_new_grid_refine_kwargs(
-            gen_new_grid_refine_kwargs)
-
-        if 'range_par' not in gen_new_grid_refine_kwargs:
-            gen_new_grid_refine_kwargs['range_par'] = [[-np.inf, np.inf],
-                                                       [-np.inf, np.inf],
-                                                       [0, np.inf]]
-
-        return gen_new_grid_refine_kwargs
-
-
-class LinearKS(RegressorKS):
+class LinearKS(_PositiveSigmaGridMixin, RegressorKS):
 
     def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
 
@@ -1164,27 +1163,6 @@ class LinearKS(RegressorKS):
                          parser=parser_anylinear,
                          print_mean_std=print_mean_std_loglinear,
                          gen_new_grid=gen_new_grid)
-
-    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
-        gen_new_grid_kwargs = super()._set_gen_new_grid_kwargs(
-            gen_new_grid_kwargs)
-
-        if 'range_par' not in gen_new_grid_kwargs:
-            gen_new_grid_kwargs['range_par'] = [[-np.inf, np.inf],
-                                                [-np.inf, np.inf], [0, np.inf]]
-
-        return gen_new_grid_kwargs
-
-    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
-        gen_new_grid_refine_kwargs = super()._set_gen_new_grid_refine_kwargs(
-            gen_new_grid_refine_kwargs)
-
-        if 'range_par' not in gen_new_grid_refine_kwargs:
-            gen_new_grid_refine_kwargs['range_par'] = [[-np.inf, np.inf],
-                                                       [-np.inf, np.inf],
-                                                       [0, np.inf]]
-
-        return gen_new_grid_refine_kwargs
 
 
 class RegressorEnergyGrad(RegressorBase):
@@ -1331,22 +1309,33 @@ class RegressorEnergyGrad(RegressorBase):
         return np.asarray(params), np.array(loss_history)
 
 
-class LogLinearEnergyPT(LogLinearKS):
-    """Log-linear regression fitted by grid search on energy-test p-values.
+class RegressorEnergyPT(RegressorKS):
+    """Grid-search regressor weighting the grid by energy-test p-values.
 
-    Same zoom-in grid machinery as `LogLinearKS`, with the 2D two-sample KS
-    compare replaced by the permutation energy test: at each grid point a
-    synthetic sample is generated and its energy distance to the observed
-    sample is converted to a p-value, which weights the grid. Each grid point
-    costs O((N + M)^2 * permutations); reduce N or `permutations` for large
-    datasets, or pass ``chunk_size``/``chunk_iter`` to estimate each distance
-    on sub-samples instead (see
-    `raddest.reg.energy.energy_test`).
+    The energy-test counterpart of `RegressorKS`: same zoom-in grid
+    machinery, with the 2D two-sample KS compare replaced by the permutation
+    energy test. At each grid point a synthetic sample is generated and its
+    energy distance to the observed sample is converted to a p-value, which
+    weights the grid. Each grid point costs O((N + M)^2 * permutations);
+    reduce N or `permutations` for large datasets, or pass
+    ``chunk_size``/``chunk_iter`` to estimate each distance on sub-samples
+    instead (see `raddest.reg.energy.energy_test`).
+
+    Concrete models subclass this together with their parameterization (see
+    `LogLinearEnergyPT`); `func_x2y_jax` is required only for the jax
+    backend.
 
     Parameters
     ----------
     xflow, yflow : FlowVI
         Fitted x and y flows.
+    func_x2y : callable
+        Numpy scatter function converting latent x to y.
+    parser, print_mean_std : callable
+        Grid-result parser and progress printer, as in `RegressorKS`.
+    func_x2y_jax : callable or None, optional
+        Differentiable scatter function; required by the jax backend.
+        Default is None.
     permutations : int, optional
         Number of permutations per grid point. Default is 200.
     chunk_size, chunk_iter : int or None, optional
@@ -1357,17 +1346,20 @@ class LogLinearEnergyPT(LogLinearKS):
         one joblib worker per point; ``'jax'`` evaluates the whole grid in
         this process with vectorized permutations on the jax device (see
         `raddest.reg.energy.construct_energy_compare_jax`) — this is where
-        GPU parallelism pays off, and it needs `func_x2y_jax` (provided).
-        `num_process` is ignored with the jax backend.
+        GPU parallelism pays off. `num_process` is ignored with the jax
+        backend. Default is 'numpy'.
     gen_new_grid : str, optional
         Zoom-in grid regeneration scheme. Default is 'mean_std'.
     """
 
-    func_x2y_jax = staticmethod(loglinear_scatter_jax)
-
     def __init__(self,
                  xflow,
                  yflow,
+                 func_x2y,
+                 *,
+                 parser,
+                 print_mean_std,
+                 func_x2y_jax=None,
                  permutations=200,
                  chunk_size=None,
                  chunk_iter=None,
@@ -1380,8 +1372,14 @@ class LogLinearEnergyPT(LogLinearKS):
             raise ValueError("chunked estimation is only available with the "
                              "numpy backend")
 
-        super().__init__(xflow, yflow, gen_new_grid=gen_new_grid)
+        super().__init__(xflow,
+                         yflow,
+                         func_x2y=func_x2y,
+                         parser=parser,
+                         print_mean_std=print_mean_std,
+                         gen_new_grid=gen_new_grid)
 
+        self.func_x2y_jax = func_x2y_jax
         self.backend = backend
         self.compare_constructor = partial(construct_energy_compare,
                                            permutations=permutations,
@@ -1390,6 +1388,36 @@ class LogLinearEnergyPT(LogLinearKS):
         if backend == 'jax':
             self.compare_batch_constructor = partial(
                 construct_energy_compare_jax, permutations=permutations, seed=0)
+
+
+class LogLinearEnergyPT(_PositiveSigmaGridMixin, RegressorEnergyPT):
+    """Log-linear regression fitted by grid search on energy-test p-values.
+
+    The model is y = 10^(k * log10(x) + b + sig * eps) with parameters
+    (k, b, sig); the grid is weighted by the permutation energy-test p-value
+    (see `RegressorEnergyPT` for the strategy and its options).
+    """
+
+    def __init__(self,
+                 xflow,
+                 yflow,
+                 permutations=200,
+                 chunk_size=None,
+                 chunk_iter=None,
+                 backend='numpy',
+                 gen_new_grid='mean_std'):
+
+        super().__init__(xflow,
+                         yflow,
+                         loglinear_scatter,
+                         parser=parser_anylinear,
+                         print_mean_std=print_mean_std_loglinear,
+                         func_x2y_jax=loglinear_scatter_jax,
+                         permutations=permutations,
+                         chunk_size=chunk_size,
+                         chunk_iter=chunk_iter,
+                         backend=backend,
+                         gen_new_grid=gen_new_grid)
 
 
 class LogLinearEnergyGrad(RegressorEnergyGrad):

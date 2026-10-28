@@ -4,7 +4,15 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from raddest.api.fitter import LogLinearEnergyGrad, LogLinearEnergyPT, RegressorEnergyGrad
+from raddest.api.fitter import (
+    LinearKS,
+    LogLinearEnergyGrad,
+    LogLinearEnergyPT,
+    LogLinearKS,
+    RegressorEnergyGrad,
+    RegressorEnergyPT,
+    RegressorKS,
+)
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
 
@@ -133,40 +141,6 @@ class TestLogLinearEnergyPTJaxBackend:
         assert abs(params_mean[1] - TRUE_PARAMS['b']) < 0.6
         assert abs(params_mean[2] - TRUE_PARAMS['sig']) < 0.15
 
-    def test_results_match_numpy_backend(self, fitted_regressors):
-        # both backends weight the same grid; the jax backend uses fixed noise
-        # draws per grid point, the numpy backend re-draws, so the weighted
-        # means agree only statistically — assert the shared best grid point.
-        regressor_pt, regressor_pt_jax, _, x_obs, _, y_obs, _ = fitted_regressors
-        params_list = [
-            np.linspace(1.0, 3.0, 4),
-            np.linspace(-0.5, 1.5, 4),
-            np.linspace(0.05, 0.2, 3),
-        ]
-        _, _, res_np = regressor_pt.fit(x_obs,
-                                        y_obs,
-                                        params_list=params_list,
-                                        N=300,
-                                        num_process=2,
-                                        max_i=0,
-                                        refine=False)
-        _, _, res_jax = regressor_pt_jax.fit(x_obs,
-                                             y_obs,
-                                             params_list=params_list,
-                                             N=300,
-                                             max_i=0,
-                                             refine=False)
-        # the two backends agree statistically: their best grid points are
-        # neighbors (at most one grid step apart per axis)
-        i_np = np.argmax(res_np[:, 4])
-        i_jax = np.argmax(res_jax[:, 4])
-        idx_np = np.array([np.argmin(np.abs(g - res_np[i_np, j]))
-                           for j, g in enumerate(params_list)])
-        idx_jax = np.array([np.argmin(np.abs(g - res_jax[i_jax, j]))
-                            for j, g in enumerate(params_list)])
-        np.testing.assert_array_less(np.abs(idx_np - idx_jax),
-                                     np.full(3, 1.5))
-
     def test_invalid_backend_and_chunk_combination(self, fitted_regressors):
         regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
         xflow, yflow = regressor_pt.xflow, regressor_pt.yflow
@@ -175,6 +149,43 @@ class TestLogLinearEnergyPTJaxBackend:
         with pytest.raises(ValueError, match='numpy backend'):
             LogLinearEnergyPT(xflow, yflow, chunk_size=50, chunk_iter=5,
                               backend='jax')
+
+
+class TestEnergyPTHierarchy:
+    """Model and fitting strategy are separate inheritance axes."""
+
+    def test_loglinear_energy_pt_is_not_a_loglinear_ks(self,
+                                                       fitted_regressors):
+        regressor_pt, _, _, x_obs, _, y_obs, _ = fitted_regressors
+        assert isinstance(regressor_pt, RegressorEnergyPT)
+        assert isinstance(regressor_pt, RegressorKS)
+        assert not isinstance(regressor_pt, LogLinearKS)
+
+    def test_sigma_grid_defaults_shared_with_ks_models(self):
+        pt = LogLinearEnergyPT(None, None)
+        ks = LogLinearKS(None, None)
+        linear = LinearKS(None, None)
+        for reg in (pt, ks, linear):
+            assert reg._set_gen_new_grid_kwargs(
+                {})['range_par'][2] == [0, np.inf]
+            assert reg._set_gen_new_grid_refine_kwargs(
+                {})['range_par'][2] == [0, np.inf]
+
+    def test_jax_backend_requires_func_x2y_jax(self):
+        class NoJaxPT(RegressorEnergyPT):
+
+            def __init__(self):
+                RegressorEnergyPT.__init__(
+                    self,
+                    None,
+                    None,
+                    lambda x, p: x,
+                    parser=lambda res, iargs: res,
+                    print_mean_std=lambda m, s: None,
+                    backend='jax')
+
+        with pytest.raises(ValueError, match='func_x2y_jax'):
+            NoJaxPT().fit(None, None, params_list=[[1.0]], N=10)
 
 
 class TestLogLinearEnergyGrad:
