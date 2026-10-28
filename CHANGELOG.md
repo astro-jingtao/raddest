@@ -5,6 +5,7 @@
 ### Changed
 
 - `get_xyw_trans` now takes only the four data arrays (`x_obs`, `y_obs`, `x_err`, `y_err`) positionally; `flowx`, `flowy`, the four range tuples and all remaining options are keyword-only. The integration dispatch (`auto`/`ghq`/`qmc`/`grid`/`qgrid`/`inter_grid`/hybrids) is factored into helpers inside `raddest.reg.map`, and the module gains type annotations and docstrings.
+- `shrink_data` takes only (`x_obs`, `x_err`) positionally; `method` and the remaining options are keyword-only. The method dispatch and the `auto` model-selection loop are factored into helpers inside `raddest.shrink`, and the module gains type annotations and docstrings.
 
 ## 0.10.0 - 2026-10-29
 
