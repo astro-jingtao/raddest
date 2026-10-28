@@ -268,7 +268,9 @@ class TestConstructEnergyCompareJax:
     """The batch grid compare closure (jax grid backend)."""
 
     @staticmethod
-    def _make_inputs(n=200, seed=13):
+    def _make_inputs(n=200, seed=13) -> tuple[np.ndarray, np.ndarray,
+                                              np.ndarray, np.ndarray,
+                                              np.ndarray, np.ndarray]:
         rng = np.random.default_rng(seed)
         x_gen = rng.uniform(1, 10, size=n)
         x_obs_gen = x_gen + rng.normal(scale=0.1, size=n)
@@ -279,7 +281,7 @@ class TestConstructEnergyCompareJax:
         return x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs
 
     @staticmethod
-    def linear_jax(x, params, eps):
+    def linear_jax(x, params, eps) -> jax.Array:
         return params[0] * x + params[1] + params[2] * eps
 
     def test_batch_rows_match_single_point_generation(self):
@@ -287,13 +289,14 @@ class TestConstructEnergyCompareJax:
         # and check the batch result against energy_test_jax on that sample
         x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
         seed = 0
-        compare = construct_energy_compare_jax(self.linear_jax,
-                                               x_obs,
-                                               y_obs,
-                                               x_gen,
-                                               x_obs_gen,
-                                               y_kdt,
-                                               y_err_kdt,
+        compare = construct_energy_compare_jax(
+            self.linear_jax,
+            x_obs,
+            y_obs,
+            x_gen,
+            x_obs_gen,
+            y_kdt=y_kdt,
+            y_err_kdt=y_err_kdt,
                                                permutations=50,
                                                seed=seed)
         params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
@@ -317,13 +320,14 @@ class TestConstructEnergyCompareJax:
 
     def test_good_params_smaller_statistic_and_larger_p(self):
         x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
-        compare = construct_energy_compare_jax(self.linear_jax,
-                                               x_obs,
-                                               y_obs,
-                                               x_gen,
-                                               x_obs_gen,
-                                               y_kdt,
-                                               y_err_kdt,
+        compare = construct_energy_compare_jax(
+            self.linear_jax,
+            x_obs,
+            y_obs,
+            x_gen,
+            x_obs_gen,
+            y_kdt=y_kdt,
+            y_err_kdt=y_err_kdt,
                                                permutations=50)
         params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
         stat_good, p_good = compare(params[[0]])[0]
@@ -333,13 +337,14 @@ class TestConstructEnergyCompareJax:
 
     def test_grid_of_points_runs(self):
         x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
-        compare = construct_energy_compare_jax(self.linear_jax,
-                                               x_obs,
-                                               y_obs,
-                                               x_gen,
-                                               x_obs_gen,
-                                               y_kdt,
-                                               y_err_kdt,
+        compare = construct_energy_compare_jax(
+            self.linear_jax,
+            x_obs,
+            y_obs,
+            x_gen,
+            x_obs_gen,
+            y_kdt=y_kdt,
+            y_err_kdt=y_err_kdt,
                                                permutations=20)
         grid = np.array(list(itertools.product([2.8, 3.0, 3.2], [0.5, 1.0],
                                                [0.3, 0.6])))
@@ -349,13 +354,14 @@ class TestConstructEnergyCompareJax:
 
     def test_invalid_grid_shape_raises(self):
         x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._make_inputs()
-        compare = construct_energy_compare_jax(self.linear_jax,
-                                               x_obs,
-                                               y_obs,
-                                               x_gen,
-                                               x_obs_gen,
-                                               y_kdt,
-                                               y_err_kdt,
+        compare = construct_energy_compare_jax(
+            self.linear_jax,
+            x_obs,
+            y_obs,
+            x_gen,
+            x_obs_gen,
+            y_kdt=y_kdt,
+            y_err_kdt=y_err_kdt,
                                                permutations=20)
         with pytest.raises(ValueError, match='must be 2D'):
             compare(np.array([3.0, 1.0, 0.6]))
@@ -394,13 +400,14 @@ class TestConstructEnergyCompare:
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
         gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
                                             params[1])
-        compare = construct_energy_compare(gen_cond,
-                                            x_gen,
-                                            x_gen,
-                                            y_kdt,
-                                            y_err_kdt,
-                                            x_obs,
-                                            y_obs,
+        compare = construct_energy_compare(
+            gen_cond,
+            x_gen,
+            x_gen,
+            y_kdt,
+            y_err_kdt,
+            x_obs=x_obs,
+            y_obs=y_obs,
                                             permutations=50)
         np.random.seed(0)
         stat_good, p_good = compare(3.0, 1.0)
@@ -412,13 +419,14 @@ class TestConstructEnergyCompare:
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
         gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
                                             params[1])
-        compare = construct_energy_compare(gen_cond,
-                                            x_gen,
-                                            x_gen,
-                                            y_kdt,
-                                            y_err_kdt,
-                                            x_obs,
-                                            y_obs,
+        compare = construct_energy_compare(
+            gen_cond,
+            x_gen,
+            x_gen,
+            y_kdt,
+            y_err_kdt,
+            x_obs=x_obs,
+            y_obs=y_obs,
                                             permutations=20)
         np.random.seed(1)
         stat, p = compare(3.0, 1.0)
@@ -430,13 +438,14 @@ class TestConstructEnergyCompare:
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
         gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
                                             params[1])
-        compare_chunk = construct_energy_compare(gen_cond,
-                                                 x_gen,
-                                                 x_gen,
-                                                 y_kdt,
-                                                 y_err_kdt,
-                                                 x_obs,
-                                                 y_obs,
+        compare_chunk = construct_energy_compare(
+            gen_cond,
+            x_gen,
+            x_gen,
+            y_kdt,
+            y_err_kdt,
+            x_obs=x_obs,
+            y_obs=y_obs,
                                                  permutations=20,
                                                  chunk_size=100,
                                                  chunk_iter=10)
@@ -481,8 +490,8 @@ class TestConstructEnergyLoss:
                                      y_obs,
                                      x_gen,
                                      x_obs_gen,
-                                     y_kdt,
-                                     y_err_kdt,
+                                     y_kdt=y_kdt,
+                                     y_err_kdt=y_err_kdt,
                                      seed=0)
         loss_good = loss(jnp.asarray([3.0, 1.0, 0.6], dtype=jnp.float32))
         loss_bad = loss(jnp.asarray([5.0, 1.0, 0.6], dtype=jnp.float32))

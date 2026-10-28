@@ -4,6 +4,7 @@
 
 ### Changed
 
+- `raddest.reg.energy` compare/loss constructors take `y_kdt`/`y_err_kdt` (and for `construct_energy_compare` also `x_obs`/`y_obs`/`permutations`) as keyword-only, matching the `construct_ks_compare` protocol: `construct_energy_compare`, `construct_energy_compare_jax`, `construct_energy_loss`.
 - `get_xyw_trans` now takes only the four data arrays (`x_obs`, `y_obs`, `x_err`, `y_err`) positionally; `flowx`, `flowy`, the four range tuples and all remaining options are keyword-only. The integration dispatch (`auto`/`ghq`/`qmc`/`grid`/`qgrid`/`inter_grid`/hybrids) is factored into helpers inside `raddest.reg.map`, and the module gains type annotations and docstrings.
 - `shrink_data` takes only (`x_obs`, `x_err`) positionally; `method` and the remaining options are keyword-only. The method dispatch and the `auto` model-selection loop are factored into helpers inside `raddest.shrink`, and the module gains type annotations and docstrings.
 - `raddest.reg.ks` sample-generation and comparison functions take only the leading flow pair (or sample-array group) positionally; the four range tuples, model parameters, and options are keyword-only: `gen_xy_obs_prepare`, `loglinear_x2y`, `gen_xy_obs_loglinear(_neglogplus)`, `get_ks_reg_loglinear`, `compare_loglinear`. Type annotations and docstrings throughout.

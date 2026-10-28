@@ -393,16 +393,18 @@ def energy_test_jax(
     return float(test_stat), float(p_value)
 
 
-def construct_energy_compare(
+# PLR0913 (10 args) waived here: mirrors construct_ks_compare's data bundle —
+# the generator with its four sample arrays plus the observed pair.
+def construct_energy_compare(  # noqa: PLR0913
     generator_cond: Callable,
     x_gen: np.ndarray,
     x_obs_gen: np.ndarray,
     y_kdt: np.ndarray,
     y_err_kdt: np.ndarray,
+    *,
     x_obs: np.ndarray,
     y_obs: np.ndarray,
     permutations: int = 200,
-    *,
     chunk_size: int | None = None,
     chunk_iter: int | None = None,
 ) -> Callable[..., tuple[float, float]]:
@@ -463,15 +465,17 @@ def construct_energy_compare(
     return energy_compare
 
 
-def construct_energy_compare_jax(
+# PLR0913 (11 args) waived here: the batch grid backend carries the same data
+# bundle as construct_energy_compare plus its y bounds and rng controls.
+def construct_energy_compare_jax(  # noqa: PLR0913
     func_x2y_jax: Callable,
     x_obs: np.ndarray,
     y_obs: np.ndarray,
     x_gen: np.ndarray,
     x_obs_gen: np.ndarray,
+    *,
     y_kdt: np.ndarray,
     y_err_kdt: np.ndarray,
-    *,
     y_min: float | None = None,
     y_max: float | None = None,
     permutations: int = 200,
@@ -624,12 +628,15 @@ def match_y_err_jax(
     return matched.reshape(-1)[:n]
 
 
-def construct_energy_loss(
+# PLR0913 (10 args) waived here: the gradient-fitting twin of the compare
+# bundle — callable, four sample arrays, y bounds, and the rng seed.
+def construct_energy_loss(  # noqa: PLR0913
     func_x2y_jax: Callable,
     x_obs: np.ndarray,
     y_obs: np.ndarray,
     x_gen: np.ndarray,
     x_obs_gen: np.ndarray,
+    *,
     y_kdt: np.ndarray,
     y_err_kdt: np.ndarray,
     y_min: float | None = None,

@@ -1107,8 +1107,8 @@ class RegressorKS(RegressorBase):
                 y_obs,
                 x_gen,
                 x_obs_gen,
-                y_kdt,
-                y_err_kdt,
+                y_kdt=y_kdt,
+                y_err_kdt=y_err_kdt,
                 y_min=y_range[0],
                 y_max=y_range[1])
 
@@ -1302,8 +1302,8 @@ class RegressorEnergyGrad(RegressorBase):
                                      y_obs,
                                      x_gen,
                                      x_obs_gen,
-                                     y_kdt,
-                                     y_err_kdt,
+                                     y_kdt=y_kdt,
+                                     y_err_kdt=y_err_kdt,
                                      y_min=y_range[0],
                                      y_max=y_range[1],
                                      seed=seed)
