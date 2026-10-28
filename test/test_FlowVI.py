@@ -8,6 +8,8 @@ import pytest
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
 
+pytestmark = pytest.mark.slow
+
 
 def fit_tiny_flowvi():
     x = np.random.uniform(1, 3, size=200)

@@ -50,6 +50,7 @@ class TestGetShift:
         assert np.isfinite(shift)
 
 
+@pytest.mark.slow
 class TestFlowVIBranches:
 
     def test_transfer_params_ignored_warning(self, capsys):

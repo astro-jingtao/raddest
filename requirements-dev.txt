@@ -5,3 +5,7 @@ pytest
 pytest-cov
 ruff
 pted
+# fitter.py imports ndtest unconditionally; it is not on PyPI.
+ndtest @ git+https://github.com/astro-jingtao/ndtest
+# git filter that normalizes *.ipynb on add (keep code+outputs); see README.
+nbstripout

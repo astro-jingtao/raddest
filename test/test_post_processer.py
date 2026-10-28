@@ -10,6 +10,8 @@ from raddest.api.flowvi import FlowVI
 from raddest.api.post_processer import post_shift
 from raddest.transfer import NegLogPlus
 
+pytestmark = pytest.mark.slow
+
 avoid_heavy = False
 
 

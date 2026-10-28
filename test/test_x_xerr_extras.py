@@ -28,6 +28,7 @@ def make_data(n=300):
     return x_obs, x_err
 
 
+@pytest.mark.slow
 class TestNfFitVariants:
 
     def test_neglogplus_roundtrip(self):
@@ -102,6 +103,7 @@ class TestGenXobsTransWrappers:
             assert np.asarray(out[2]).shape == (50, )
 
 
+@pytest.mark.slow
 class TestFlowVIFitOptions:
 
     def test_skip_fitting_if_init_good(self):

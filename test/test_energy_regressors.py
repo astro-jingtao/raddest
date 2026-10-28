@@ -70,6 +70,7 @@ def fitted_regressors():
     return regressor_pt, regressor_pt_jax, regressor_grad, x_obs, x_err, y_obs, y_err
 
 
+@pytest.mark.slow
 class TestLogLinearEnergyPT:
 
     def test_fit_recovers_params(self, fitted_regressors):
@@ -116,6 +117,7 @@ class TestLogLinearEnergyPT:
         assert p_good > p_bad
 
 
+@pytest.mark.slow
 class TestLogLinearEnergyPTJaxBackend:
 
     def test_fit_recovers_params(self, fitted_regressors):
@@ -154,9 +156,9 @@ class TestLogLinearEnergyPTJaxBackend:
 class TestEnergyPTHierarchy:
     """Model and fitting strategy are separate inheritance axes."""
 
-    def test_loglinear_energy_pt_is_not_a_loglinear_ks(self,
-                                                       fitted_regressors):
-        regressor_pt, *_ = fitted_regressors
+    def test_loglinear_energy_pt_is_not_a_loglinear_ks(self):
+        # no flows needed: the class hierarchy is inspectable without fitting
+        regressor_pt = LogLinearEnergyPT(None, None)
         assert isinstance(regressor_pt, RegressorEnergyPT)
         assert isinstance(regressor_pt, RegressorKS)
         assert not isinstance(regressor_pt, LogLinearKS)
@@ -188,6 +190,7 @@ class TestEnergyPTHierarchy:
             NoJaxPT().fit(None, None, params_list=[[1.0]], N=10)
 
 
+@pytest.mark.slow
 class TestLogLinearEnergyGrad:
 
     def test_fit_decreases_loss_and_moves_toward_truth(self, fitted_regressors):

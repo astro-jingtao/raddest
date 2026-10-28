@@ -27,6 +27,7 @@ def ml_regressor(tiny_flows):
     return LogLinearML(xflow, yflow)
 
 
+@pytest.mark.slow
 class TestLogLinearMLFit:
 
     def test_fit_recovers_params(self, ml_regressor, obs_data):
@@ -183,6 +184,7 @@ class TestLogLinearMLFit:
         assert sampler.chain.shape == (nwalkers, 20, 3)
 
 
+@pytest.mark.slow
 class TestOtherMLRegressors:
 
     def test_linear_ml_moves_and_stays_finite(self, tiny_flows, obs_data):
@@ -276,6 +278,7 @@ class TestOtherMLRegressors:
             PiecewiseLogLinearStudentTML(xflow, yflow, n_piece=2)
 
 
+@pytest.mark.slow
 class TestLogLinearKSFit:
 
     def test_fit_with_refine(self, tiny_flows, obs_data):
@@ -444,6 +447,7 @@ class TestScatterAndPriorBodies:
         assert float(lp_bad[0]) == -jnp.inf
 
 
+@pytest.mark.slow
 class TestLinearKS:
 
     def test_init_and_ranges(self, tiny_flows, obs_data):
@@ -456,6 +460,7 @@ class TestLinearKS:
         assert refine_kwargs['n'] == 20
 
 
+@pytest.mark.slow
 class TestEnergyGradVerbose:
 
     def test_verbose_and_converged(self, tiny_flows, obs_data, capsys):
