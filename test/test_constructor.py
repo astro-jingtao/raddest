@@ -58,7 +58,8 @@ class TestLikelihood:
 
     def test_lognorm_likelihood_factory(self):
         def func(x, params):
-            return func_jax_saturated(x, *params)
+            k, b, x0, x1, c0, c1 = params
+            return func_jax_saturated(x, k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1)
 
         likelihood = construct_lognorm_likelihood(func)
         x, y, w = make_1d_data()
@@ -225,7 +226,8 @@ class TestGeneratorCond:
         y_obs = 2 * x_obs + 1 + rng.normal(scale=0.2, size=100)
 
         compare = construct_ks_compare(generator_cond, x_gen, x_gen, y_kdt,
-                                       y_err_kdt, x_obs, y_obs)
+                                       y_err_kdt, x_obs=x_obs,
+                                       y_obs=y_obs)
         np.random.seed(0)
         D_good, _p_good = compare(2.0, 1.0)
         D_bad, _p_bad = compare(5.0, 1.0)

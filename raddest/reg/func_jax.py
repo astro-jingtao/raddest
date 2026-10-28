@@ -1,23 +1,51 @@
+"""Jax twins of ``raddest.reg.func``: jit-compiled, differentiable versions of
+the saturated and piecewise-linear regression functions."""
+
+from __future__ import annotations
+
+from typing import Callable
+
+import jax
 from jax import jit
 from jax.nn import sigmoid as _sigmoid
 import jax.numpy as jnp
+from numpy.typing import ArrayLike
 
 
-def sigmoid(x, x0, beta):
+def sigmoid(x: ArrayLike, x0: float, beta: float) -> jax.Array:
+    '''Jax logistic sigmoid ``1 / (1 + exp(-beta * (x - x0)))``.'''
     return _sigmoid(beta * (x - x0))
 
 
 @jit
-def saturated_linear_smooth_jax(x, k, b, x0, x1, c0, c1, width=0.01):
+def saturated_linear_smooth_jax(x: ArrayLike,
+                                *,
+                                k: jax.Array,
+                                b: jax.Array,
+                                x0: jax.Array,
+                                x1: jax.Array,
+                                c0: jax.Array,
+                                c1: jax.Array,
+                                width: jax.Array = 0.01) -> jax.Array:
+    '''Jax twin of ``raddest.reg.func.saturated_linear_smooth``: sigmoid-blended
+    exponential tails around a linear core, all parameters keyword-only.'''
 
-    def get_pars(k, b, x0, x1, c0, c1):
+    def get_pars(
+        *,
+        k: jax.Array,
+        b: jax.Array,
+        x0: jax.Array,
+        x1: jax.Array,
+        c0: jax.Array,
+        c1: jax.Array,
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         n0 = k / (k * x0 + b - c0)
         n1 = k / (k * x1 + b - c1)
         m0 = k / (n0 * jnp.exp(n0 * x0))
         m1 = k / (n1 * jnp.exp(n1 * x1))
         return n0, n1, m0, m1
 
-    n0, n1, m0, m1 = get_pars(k, b, x0, x1, c0, c1)
+    n0, n1, m0, m1 = get_pars(k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1)
     w_low = sigmoid(x, x0, -1 / width)
     y_low = m0 * jnp.exp(n0 * x) + c0
     w_high = sigmoid(x, x1, 1 / width)
@@ -29,7 +57,11 @@ def saturated_linear_smooth_jax(x, k, b, x0, x1, c0, c1, width=0.01):
 
 
 @jit
-def loglinear_scatter_jax(x, params, eps):
+def loglinear_scatter_jax(
+    x: ArrayLike,
+    params: jax.Array,
+    eps: ArrayLike,
+) -> jax.Array:
     """Jax twin of ``raddest.reg.ks.loglinear_scatter`` with the intrinsic
     scatter injected as a fixed unit-normal draw ``eps`` (reparameterization).
 
@@ -40,10 +72,18 @@ def loglinear_scatter_jax(x, params, eps):
                      params[2] * eps)
 
 
-def generate_piecewise_linear_jax(n):
+def generate_piecewise_linear_jax(n: int) -> Callable:
+    '''Jax twin of ``raddest.reg.func.generate_piecewise_linear``; the returned
+    callable is ``piecewise_linear(x, *, b0, x0, k_lst, dx_lst, width=0.01)``.'''
 
     @jit
-    def piecewise_linear(x, b0, x0, k_lst, dx_lst, width=0.01):
+    def piecewise_linear(x: ArrayLike,
+                         *,
+                         b0: jax.Array,
+                         x0: jax.Array,
+                         k_lst: jax.Array,
+                         dx_lst: jax.Array,
+                         width: jax.Array = 0.01) -> jax.Array:
 
         y_lst = jnp.empty((n, *x.shape))
         w_lst = jnp.empty((n, *x.shape))

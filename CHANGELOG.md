@@ -6,6 +6,7 @@
 
 - `get_xyw_trans` now takes only the four data arrays (`x_obs`, `y_obs`, `x_err`, `y_err`) positionally; `flowx`, `flowy`, the four range tuples and all remaining options are keyword-only. The integration dispatch (`auto`/`ghq`/`qmc`/`grid`/`qgrid`/`inter_grid`/hybrids) is factored into helpers inside `raddest.reg.map`, and the module gains type annotations and docstrings.
 - `shrink_data` takes only (`x_obs`, `x_err`) positionally; `method` and the remaining options are keyword-only. The method dispatch and the `auto` model-selection loop are factored into helpers inside `raddest.shrink`, and the module gains type annotations and docstrings.
+- Model-parameter functions in `raddest.reg.func` / `raddest.reg.func_jax` now take the input array positionally and every model parameter keyword-only: `saturated_linear`, `saturated_linear_smooth` (+ jax twins), `get_saturated_pars`, and the closures returned by `generate_piecewise_linear(_jax)`. In `raddest.reg.constructor`, the `trainer` loop's optimizer options (`lr`, `n_step`, `atol`, `rtol`, `verbose`), `generator_cond`'s `y_min`/`y_max`, and `construct_ks_compare`'s `x_obs`/`y_obs` become keyword-only; the `compare_constructor` subclass protocol documented in `raddest.api.fitter` is updated to match. All three modules gain type annotations and docstrings.
 
 ## 0.10.0 - 2026-10-29
 

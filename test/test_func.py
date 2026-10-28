@@ -32,10 +32,10 @@ class TestSaturatedLinear:
 
     def test_pars_and_continuity(self):
         k, b, x0, x1, c0, c1 = 1.0, 0.0, -1.0, 1.0, -2.0, 2.0
-        n0, n1, m0, m1 = get_saturated_pars(k, b, x0, x1, c0, c1)
+        n0, n1, m0, m1 = get_saturated_pars(k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1)
 
         x = np.linspace(-5, 5, 201)
-        y = saturated_linear(x, k, b, x0, x1, c0, c1)
+        y = saturated_linear(x, k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1)
         assert np.all(np.isfinite(y))
 
         # the three branches join continuously at x0 and x1
@@ -45,20 +45,23 @@ class TestSaturatedLinear:
             k * x1 + b, abs=1e-6)
 
         # explicit-parameters call matches the derived one
-        y2 = saturated_linear(x, k, b, x0, x1, c0, c1, n0, n1, m0, m1)
+        y2 = saturated_linear(x, k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1,
+                             n0=n0, n1=n1, m0=m0, m1=m1)
         np.testing.assert_allclose(y, y2)
 
     def test_smooth_matches_piecewise_far_from_transition(self):
         k, b, x0, x1, c0, c1 = 1.0, 0.0, -1.0, 1.0, -2.0, 2.0
-        y_smooth = saturated_linear_smooth(np.array([0.0]), k, b, x0, x1, c0,
-                                           c1, width=0.01)
+        y_smooth = saturated_linear_smooth(np.array([0.0]), k=k, b=b, x0=x0, x1=x1,
+                                           c0=c0, c1=c1, width=0.01)
         assert float(y_smooth[0]) == pytest.approx(k * 0 + b, rel=1e-3)
 
     def test_jax_matches_numpy(self):
         k, b, x0, x1, c0, c1 = 1.0, 0.0, -1.0, 1.0, -2.0, 2.0
         x = np.linspace(-5, 5, 201)
-        y_np = saturated_linear_smooth(x, k, b, x0, x1, c0, c1, width=0.05)
-        y_jax = saturated_linear_smooth_jax(x, k, b, x0, x1, c0, c1, width=0.05)
+        y_np = saturated_linear_smooth(x, k=k, b=b, x0=x0, x1=x1, c0=c0, c1=c1,
+                               width=0.05)
+        y_jax = saturated_linear_smooth_jax(x, k=k, b=b, x0=x0, x1=x1, c0=c0,
+                                       c1=c1, width=0.05)
         np.testing.assert_allclose(y_jax, y_np, rtol=1e-4, atol=1e-6)
 
 
@@ -75,8 +78,8 @@ class TestPiecewiseLinear:
         f_np = generate_piecewise_linear(n_piece)
         f_jax = generate_piecewise_linear_jax(n_piece)
 
-        y_np = f_np(x, b0, x0, k_lst, dx_lst, width=0.05)
-        y_jax = f_jax(x, b0, x0, k_lst, dx_lst, width=0.05)
+        y_np = f_np(x, b0=b0, x0=x0, k_lst=k_lst, dx_lst=dx_lst, width=0.05)
+        y_jax = f_jax(x, b0=b0, x0=x0, k_lst=k_lst, dx_lst=dx_lst, width=0.05)
         np.testing.assert_allclose(y_jax, y_np, rtol=1e-4, atol=1e-6)
 
     def test_two_piece_tracks_each_line_far_from_knots(self):
@@ -85,8 +88,10 @@ class TestPiecewiseLinear:
         dx_lst = np.array([1.0])
         f = generate_piecewise_linear(2)
 
-        y_left = float(f(np.array([0.2]), b0, x0, k_lst, dx_lst, width=0.01)[0])
-        y_right = float(f(np.array([2.8]), b0, x0, k_lst, dx_lst, width=0.01)[0])
+        y_left = float(f(np.array([0.2]), b0=b0, x0=x0, k_lst=k_lst, dx_lst=dx_lst,
+              width=0.01)[0])
+        y_right = float(f(np.array([2.8]), b0=b0, x0=x0, k_lst=k_lst, dx_lst=dx_lst,
+              width=0.01)[0])
 
         b1 = k_lst[0] * x0 + b0 - k_lst[1] * x0
         assert y_left == pytest.approx(k_lst[0] * 0.2 + b0, rel=1e-2)

@@ -629,8 +629,14 @@ class SaturatedLogLinearML(RegressorML):
         def saturated_loglinear_scatter(x, params):
             params_loglinear = params[:-1]
             sig = params[-1]
+            k, b, x0, x1, c0, c1 = params_loglinear
             log10_y_pred = saturated_linear_smooth(np.log10(x),
-                                                   *params_loglinear,
+                                                   k=k,
+                                                   b=b,
+                                                   x0=x0,
+                                                   x1=x1,
+                                                   c0=c0,
+                                                   c1=c1,
                                                    width=width)
             return np.power(
                 10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
@@ -640,8 +646,14 @@ class SaturatedLogLinearML(RegressorML):
             '''
             params: (k, b, x0, x1, c0, c1)
             '''
+            k, b, x0, x1, c0, c1 = params
             log10_y_pred = saturated_linear_smooth_jax(jnp.log10(jnp.abs(x)),
-                                                       *params,
+                                                       k=k,
+                                                       b=b,
+                                                       x0=x0,
+                                                       x1=x1,
+                                                       c0=c0,
+                                                       c1=c1,
                                                        width=width)
             return log10_y_pred
 
@@ -687,9 +699,12 @@ class PiecewiseLogLinearML(RegressorML):
         def piecewise_loglinear_scatter(x, params):
 
             sig = params[-1]
+            b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-1])
             log10_y_pred = piecewise_linear(np.log10(x),
-                                            *self.parse_piecewise_params(
-                                                params[:-1]),
+                                            b0=b0,
+                                            x0=x0,
+                                            k_lst=k_lst,
+                                            dx_lst=dx_lst,
                                             width=width)
             return np.power(
                 10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
@@ -699,9 +714,13 @@ class PiecewiseLogLinearML(RegressorML):
             '''
             params: (b0, x0) + k_lst + dx_lst
             '''
+            b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params)
             log10_y_pred = piecewise_linear_jax(
                 jnp.log10(jnp.abs(x)),
-                *self.parse_piecewise_params(params),
+                b0=b0,
+                x0=x0,
+                k_lst=k_lst,
+                dx_lst=dx_lst,
                 width=width)
             return log10_y_pred
 
@@ -757,9 +776,12 @@ class PiecewiseLogLinearStudentTML(RegressorML):
         def piecewise_loglinear_scatter(x, params):
 
             df, sig = params[-2:]
+            b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-2])
             log10_y_pred = piecewise_linear(np.log10(x),
-                                            *self.parse_piecewise_params(
-                                                params[:-2]),
+                                            b0=b0,
+                                            x0=x0,
+                                            k_lst=k_lst,
+                                            dx_lst=dx_lst,
                                             width=width)
             return np.power(
                 10, log10_y_pred +
@@ -770,9 +792,13 @@ class PiecewiseLogLinearStudentTML(RegressorML):
             '''
             params: (b0, x0) + k_lst + dx_lst
             '''
+            b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params)
             log10_y_pred = piecewise_linear_jax(
                 jnp.log10(jnp.abs(x)),
-                *self.parse_piecewise_params(params),
+                b0=b0,
+                x0=x0,
+                k_lst=k_lst,
+                dx_lst=dx_lst,
                 width=width)
             return log10_y_pred
 
@@ -893,7 +919,8 @@ class RegressorKS(RegressorBase):
     The comparison statistic used to weight the grid is decided by
     ``compare_constructor``, which is called as
     ``compare_constructor(generator_cond, x_gen, x_obs_gen, y_kdt, y_err_kdt,
-    x_obs, y_obs)`` and must return ``compare(*params) -> (stat, p_value)``.
+    x_obs=..., y_obs=...)`` and must return ``compare(*params) -> (stat,
+    p_value)``.
     Subclasses replace it to fit against a different distribution distance
     (e.g. the energy test); the default is the 2D two-sample KS test.
     """
@@ -1069,7 +1096,8 @@ class RegressorKS(RegressorBase):
         # with the numpy backend each process in zoom_in_grid must not import
         # jax or it will OOM.
         compare = self.compare_constructor(self.generator_cond, x_gen, x_obs_gen,
-                                           y_kdt, y_err_kdt, x_obs, y_obs)
+                                           y_kdt, y_err_kdt, x_obs=x_obs,
+                                           y_obs=y_obs)
 
         batch_compare = None
         if self.backend == 'jax':
