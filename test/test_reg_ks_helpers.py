@@ -50,16 +50,16 @@ class TestLogLinearX2Y:
     def test_default_and_more(self):
         x, x_obs, y_kdt, y_err_kdt = self._inputs()
         np.random.seed(0)
-        out = loglinear_x2y(x, x_obs, y_kdt, y_err_kdt, 2.0, 0.5, 0.1)
+        out = loglinear_x2y(x, x_obs, y_kdt, y_err_kdt, k=2.0, b=0.5, sig=0.1)
         assert len(out) == 2
         np.random.seed(1)
         out_more = loglinear_x2y(x,
                                  x_obs,
                                  y_kdt,
                                  y_err_kdt,
-                                 2.0,
-                                 0.5,
-                                 0.1,
+                                 k=2.0,
+                                 b=0.5,
+                                 sig=0.1,
                                  return_more=True)
         assert len(out_more) == 4
 
@@ -102,9 +102,18 @@ class TestGenXYObsLoglinear:
         return ([xflow.x_min, xflow.x_max], [xflow.x_err_min, xflow.x_err_max],
                 [yflow.x_min, yflow.x_max], [yflow.x_err_min, yflow.x_err_max])
 
+    def _ranges_kw(self, xflow, yflow):
+        x_range, x_err_range, y_range, y_err_range = self._ranges(xflow, yflow)
+        return {
+            'x_range': x_range,
+            'x_err_range': x_err_range,
+            'y_range': y_range,
+            'y_err_range': y_err_range,
+        }
+
     def test_gen_and_more(self):
         xflow, yflow = self._args()
-        ranges = self._ranges(xflow, yflow)
+        ranges_kw = self._ranges_kw(xflow, yflow)
         tkw = {
             'x_transfer': xflow.transfer,
             'x_transfer_params': xflow.transfer_params,
@@ -112,33 +121,37 @@ class TestGenXYObsLoglinear:
             'y_transfer_params': yflow.transfer_params,
         }
         np.random.seed(0)
-        out = gen_xy_obs_loglinear(xflow.flow, yflow.flow, *ranges,
-                                   2.0, 0.5, 0.1,
+        out = gen_xy_obs_loglinear(xflow.flow, yflow.flow,
+                                   k=2.0, b=0.5, sig=0.1,
                                    n=50,
                                    return_numpy=True,
+                                   **ranges_kw,
                                    **tkw)
         assert len(out) == 2
         for o in out:
             assert np.asarray(o).shape == (50, )
 
         np.random.seed(1)
-        out_more = gen_xy_obs_loglinear(xflow.flow, yflow.flow, *ranges,
-                                        2.0, 0.5, 0.1,
+        out_more = gen_xy_obs_loglinear(xflow.flow, yflow.flow,
+                                        k=2.0, b=0.5, sig=0.1,
                                         n=50,
                                         return_numpy=True,
                                         return_more=True,
+                                        **ranges_kw,
                                         **tkw)
         assert len(out_more) == 6
 
     def test_neglogplus_variant(self):
         xflow, yflow = self._args()
-        ranges = self._ranges(xflow, yflow)
+        ranges_kw = self._ranges_kw(xflow, yflow)
         np.random.seed(2)
         x_obs_gen, _y_obs_gen = gen_xy_obs_loglinear_neglogplus(
-            xflow.flow, yflow.flow, *ranges, 2.0, 0.5, 0.1,
-            xflow.transfer_params, yflow.transfer_params,
+            xflow.flow, yflow.flow, k=2.0, b=0.5, sig=0.1,
+            x_transfer_params=xflow.transfer_params,
+            y_transfer_params=yflow.transfer_params,
             n=50,
-            return_numpy=True)
+            return_numpy=True,
+            **ranges_kw)
         assert np.asarray(x_obs_gen).shape == (50, )
 
 
@@ -158,8 +171,8 @@ class TestGetKSRegLoglinear:
                                     x_gen,
                                     y_kdt,
                                     y_err_kdt, (2.0, 0.5, 0.1),
-                                    x_obs,
-                                    y_obs,
+                                    x_obs=x_obs,
+                                    y_obs=y_obs,
                                     nboot=20,
                                     n_jobs=1)
         assert 0 <= p <= 1
@@ -180,10 +193,10 @@ class TestCompareLoglinear:
         _D, p = compare_loglinear(2.0,
                                  0.5,
                                  0.1,
-                                 x_gen,
-                                 x_gen,
-                                 y_kdt,
-                                 y_err_kdt,
-                                 x_obs,
-                                 y_obs)
+                                 x_gen=x_gen,
+                                 x_obs_gen=x_gen,
+                                 y_gen_kdt=y_kdt,
+                                 y_err_gen_kdt=y_err_kdt,
+                                 x_obs=x_obs,
+                                 y_obs=y_obs)
         assert 0 <= p <= 1
