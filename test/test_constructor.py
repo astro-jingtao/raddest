@@ -1,7 +1,4 @@
-import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '1'
 
 import jax.numpy as jnp
 from jax.scipy.stats import norm

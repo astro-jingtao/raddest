@@ -1,9 +1,6 @@
 # pylint:disable=wrong-import-position
 
-import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '1'
 
 import jax.numpy as jnp
 import numpy as np
