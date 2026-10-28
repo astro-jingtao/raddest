@@ -1,0 +1,8 @@
+requires:
+  - kind: python-package
+    name: raddest
+    home: project-env
+    note: the raddest package itself, importable in the target project's Python environment (its own dependencies — jax, pzflow, optax, emcee, ndtest — come with it)
+notes:
+  - GPU jax speeds up flow fitting and the energy gradient family; CPU works for small datasets.
+  - The skill verifies the raddest import at its workflow step 1 (point-of-use check); nothing is probed at deploy time.

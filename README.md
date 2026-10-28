@@ -69,6 +69,16 @@ params_hat, loss_history = regressor.fit(x_obs, y_obs,
 
 Both regressors also provide `energy_test(params, x_obs, y_obs)`, which evaluates the fitted model against the observed data with a fresh synthetic sample and returns the energy distance and its p-value. Each energy-test evaluation costs `O((N + M)^2 * permutations)`; reduce `N` or `permutations` for large datasets.
 
+## Claude skill
+
+The package ships a Claude Agent Skill (`raddest-regression`) that guides an agent through choosing and running the fitting methods. After installing `raddest`, print the installed skills root and the deployment guide with:
+
+```bash
+python -m raddest.skills
+```
+
+See the printed `SKILL-DEPLOY.md` for how to link the skill into Claude Code.
+
 ## Citation
 
 If you use `raddest` in your research, please cite the following paper:

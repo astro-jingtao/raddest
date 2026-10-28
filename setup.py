@@ -12,4 +12,14 @@ setup(
     install_requires=[
         'numpy', 'joblib', 'pzflow', 'optax', 'interpax', 'scipy',
         'statsmodels', 'emcee'
-    ])
+    ],
+    include_package_data=True,
+    package_data={
+        'raddest.skills': [
+            'SKILL-DEPLOY.md',
+            'raddest-regression/meta.yaml',
+            'raddest-regression/skill/SKILL.md',
+            'raddest-regression/skill/CHANGELOG.md',
+            'raddest-regression/skill/references/*.md',
+        ]
+    })
