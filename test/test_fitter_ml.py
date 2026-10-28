@@ -96,7 +96,7 @@ class TestLogLinearMLFit:
         assert len(out) == 6
         assert all(np.asarray(o).shape == (300, ) for o in out)
 
-        D, p = ml_regressor.ks_test((TRUE_PARAMS['k'], TRUE_PARAMS['b'],
+        _D, p = ml_regressor.ks_test((TRUE_PARAMS['k'], TRUE_PARAMS['b'],
                                      TRUE_PARAMS['sig']),
                                     x_obs,
                                     y_obs,
@@ -231,7 +231,7 @@ class TestOtherMLRegressors:
         assert jnp.all(jnp.isfinite(params_ml))
         assert float(params_ml[-1]) > 0  # scatter stays positive
 
-        k_lst, b_lst, x_lst, sig = regressor.to_each_piece_params(
+        k_lst, _b_lst, _x_lst, _sig = regressor.to_each_piece_params(
             np.asarray(params_ml))
         assert len(k_lst) == 2
 
@@ -286,7 +286,7 @@ class TestLogLinearKSFit:
         x_obs, _, y_obs, _ = obs_data
         regressor = LogLinearKS(xflow, yflow)
 
-        params_mean, params_std, res_arr = regressor.fit(
+        params_mean, _params_std, res_arr = regressor.fit(
             x_obs,
             y_obs,
             params_list=[
@@ -358,7 +358,7 @@ class TestRegressorKSInit:
                                 gen_new_grid='quantile')
         assert regressor.gen_new_grid_name == 'quantile'
 
-        x_obs, _, y_obs, _ = obs_data
+        _x_obs, _, _y_obs, _ = obs_data
         np.random.seed(0)
         res = regressor.gen_new_grid(
             np.column_stack([np.linspace(1, 3, 9), np.linspace(0, 1, 9),
@@ -387,7 +387,7 @@ class TestScatterAndPriorBodies:
 
     def test_sample_calls_scatters(self, tiny_flows, obs_data):
         xflow, yflow = tiny_flows
-        x_obs, _, y_obs, _ = obs_data
+        _x_obs, _, _y_obs, _ = obs_data
         np.random.seed(5)
         out = SaturatedLogLinearML(xflow, yflow, width=0.1).sample(
             (2.0, 0.0, -0.5, 0.5, -2.0, 2.0, 0.1), N=50)

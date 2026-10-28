@@ -57,7 +57,7 @@ class TestGetXYWTrans:
         # large errors -> qgrid branch
         big_err = np.full_like(x_err, 5.0)
         tkw = transfer_kwargs(xflow, yflow, x_obs, x_err, y_obs, y_err)
-        x_ext, y_ext, w = get_xyw_trans(x_obs,
+        x_ext, _y_ext, w = get_xyw_trans(x_obs,
                                         y_obs,
                                         big_err,
                                         y_err,
@@ -71,7 +71,7 @@ class TestGetXYWTrans:
         assert x_ext.shape == w.shape
 
         # small errors -> ghq branch
-        x_ext, y_ext, w = get_xyw_trans(x_obs,
+        x_ext, _y_ext, w = get_xyw_trans(x_obs,
                                         y_obs,
                                         x_err,
                                         y_err,
@@ -105,7 +105,7 @@ class TestGetXYWTrans:
         y_transfer = NegLogPlus()
         y_transfer_params = [float(np.median(y_obs)), float(np.median(y_err))]
 
-        x_ext, y_ext, w = get_xyw_trans(
+        x_ext, _y_ext, w = get_xyw_trans(
             x_obs,
             y_obs,
             x_err,
@@ -125,7 +125,7 @@ class TestGetXYWTrans:
         x_obs, x_err, y_obs, y_err = obs_data
         xflow, yflow = tiny_flows
         tkw = transfer_kwargs(xflow, yflow, x_obs, x_err, y_obs, y_err)
-        x_ext, y_ext, w = get_xyw_trans(x_obs,
+        x_ext, _y_ext, w = get_xyw_trans(x_obs,
                                         y_obs,
                                         x_err,
                                         y_err,
@@ -144,7 +144,7 @@ class TestGetXYWTrans:
         x_obs, x_err, y_obs, y_err = obs_data
         xflow, yflow = tiny_flows
         tkw = transfer_kwargs(xflow, yflow, x_obs, x_err, y_obs, y_err)
-        x_ext, y_ext, w = get_xyw_trans(x_obs,
+        x_ext, _y_ext, w = get_xyw_trans(x_obs,
                                         y_obs,
                                         x_err,
                                         y_err,
@@ -194,7 +194,7 @@ class TestGetXYWTransMixed:
         x_err_mixed = np.where(np.arange(len(x_err)) % 2 == 0, x_err,
                                x_err * 50)
         for method in ['ghq+qgrid', 'ghq+grid']:
-            x_ext, y_ext, w = get_xyw_trans(x_obs,
+            x_ext, _y_ext, w = get_xyw_trans(x_obs,
                                             y_obs,
                                             x_err_mixed,
                                             y_err,
@@ -230,11 +230,11 @@ class TestGetXYWTransMixed:
                        x_err_min=0,
                        x_err_max=float(x_err.max()) * 1.2)
 
-        x_obs, x_err, y_obs, y_err = obs_data
+        _x_obs, x_err, y_obs, y_err = obs_data
         _, yflow = tiny_flows
         # paired arrays must have equal length
         n = len(x_obs_plain)
-        x_ext, y_ext, w = get_xyw_trans(
+        x_ext, _y_ext, w = get_xyw_trans(
             x_obs_plain,
             y_obs[:n],
             x_err_plain,
@@ -282,7 +282,7 @@ class TestGetXYWTransNoYTransfer:
         xflow_plain = fit_plain(x_obs_plain, x_err)
         yflow_plain = fit_plain(y_obs_plain, y_err)
 
-        x_ext, y_ext, w = get_xyw_trans(x_obs_plain,
+        x_ext, _y_ext, w = get_xyw_trans(x_obs_plain,
                                         y_obs_plain,
                                         x_err,
                                         y_err,

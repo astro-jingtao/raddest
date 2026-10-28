@@ -138,7 +138,7 @@ class TestGenXYObsLoglinear:
         xflow, yflow = self._args()
         ranges = self._ranges(xflow, yflow)
         np.random.seed(2)
-        x_obs_gen, y_obs_gen = gen_xy_obs_loglinear_neglogplus(
+        x_obs_gen, _y_obs_gen = gen_xy_obs_loglinear_neglogplus(
             xflow.flow, yflow.flow, *ranges, 2.0, 0.5, 0.1,
             xflow.transfer_params, yflow.transfer_params,
             n=50,
@@ -158,7 +158,7 @@ class TestGetKSRegLoglinear:
                      rng.normal(scale=0.1, size=60))
 
         np.random.seed(0)
-        D, p = get_ks_reg_loglinear(x_gen,
+        _D, p = get_ks_reg_loglinear(x_gen,
                                     x_gen,
                                     y_kdt,
                                     y_err_kdt, (2.0, 0.5, 0.1),
@@ -181,7 +181,7 @@ class TestCompareLoglinear:
                      rng.normal(scale=0.1, size=50))
 
         np.random.seed(0)
-        D, p = compare_loglinear(2.0,
+        _D, p = compare_loglinear(2.0,
                                  0.5,
                                  0.1,
                                  x_gen,

@@ -137,7 +137,7 @@ class TestWeightedRes:
     def test_std_floor(self):
         xs = np.array([[1.0, 1.0], [1.0, 1.0]])
         w = np.array([1.0, 1.0])
-        mean, std = get_weighted_res(xs, w, std_min=0.5)
+        _mean, std = get_weighted_res(xs, w, std_min=0.5)
         assert std[0] == pytest.approx(0.5)
 
 

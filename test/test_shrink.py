@@ -48,7 +48,7 @@ class TestShrinkDataMethods:
 
     def test_gg(self, gauss_data):
         x_obs, x_err = gauss_data
-        x_sh, x_err_sh = shrink_data(x_obs, x_err, method='gg')
+        x_sh, _x_err_sh = shrink_data(x_obs, x_err, method='gg')
         assert x_sh.shape == x_obs.shape
         # shrinkage pulls extreme values toward the mean
         assert np.abs(x_sh - x_obs.mean()).max() < np.abs(
@@ -94,7 +94,7 @@ class TestShrinkDataMethods:
                           return_best_info=True,
                           verbose=True)
         assert len(out) == 3
-        x_sh, x_err_sh, info = out
+        x_sh, _x_err_sh, info = out
         assert 'recalibrate' in info
         assert 'Warning' in capsys.readouterr().out
         assert np.isfinite(x_sh).all()
@@ -102,7 +102,7 @@ class TestShrinkDataMethods:
     def test_auto_plain(self, gauss_data):
         x_obs, x_err = gauss_data
         np.random.seed(1)
-        x_sh, x_err_sh = shrink_data(x_obs, x_err, method='auto')
+        x_sh, _x_err_sh = shrink_data(x_obs, x_err, method='auto')
         assert np.isfinite(x_sh).all()
 
 

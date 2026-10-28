@@ -101,7 +101,7 @@ class TestExtW1D:
     def test_get_ext_w_matches_formula(self):
         x_obs = jnp.array([0.0, 1.0])
         x_err = jnp.array([0.1, 0.2])
-        x_ext, x_err_ext, w = get_ext_w(5, x_obs, x_err)
+        x_ext, _x_err_ext, w = get_ext_w(5, x_obs, x_err)
         assert x_ext.shape == (2, 5)
         # first quadrature point: sqrt(2) * sig * x_0 + mu
         nodes, weights = hermgauss(5)
@@ -113,7 +113,7 @@ class TestExtW1D:
     def test_qmc_rounds_to_2power(self, capsys):
         x_obs = jnp.array([0.0, 1.0])
         x_err = jnp.array([0.1, 0.2])
-        x_ext, x_err_ext, w = get_ext_w_qmc(5, x_obs, x_err)
+        x_ext, _x_err_ext, w = get_ext_w_qmc(5, x_obs, x_err)
         assert 'rounding to' in capsys.readouterr().out
         assert x_ext.shape == (2, 8)
         # each row of weights sums to 1
@@ -122,7 +122,7 @@ class TestExtW1D:
     def test_inter_grid(self):
         x_obs = jnp.array([0.0, 1.0])
         x_err = jnp.array([0.1, 0.2])
-        x_ext, x_err_ext, w = get_ext_w_inter_grid(6, x_obs, x_err)
+        x_ext, x_err_ext, _w = get_ext_w_inter_grid(6, x_obs, x_err)
         assert x_ext.shape == (2, 6)
         assert x_err_ext.shape == (2, 6)
 
@@ -138,14 +138,14 @@ class TestExtW2DVariants:
 
     def test_ghq_2d(self):
         d = self.DATA
-        x_ext, y_ext, x_err_ext, y_err_ext, w = get_ext_w_2d(
+        x_ext, _y_ext, _x_err_ext, _y_err_ext, w = get_ext_w_2d(
             d['x_obs'], d['y_obs'], d['x_err'], d['y_err'], 3)
         assert x_ext.shape == (2, 9)
         assert w.shape == (9, )
 
     def test_qmc_2d_rounds(self, capsys):
         d = self.DATA
-        x_ext, y_ext, _, _, w = get_ext_w_2d_qmc(d['x_obs'], d['y_obs'],
+        x_ext, _y_ext, _, _, w = get_ext_w_2d_qmc(d['x_obs'], d['y_obs'],
                                                  d['x_err'], d['y_err'], 5)
         assert 'rounding to' in capsys.readouterr().out
         assert x_ext.shape == (2, 8)
@@ -153,7 +153,7 @@ class TestExtW2DVariants:
 
     def test_inter_grid_2d(self):
         d = self.DATA
-        x_ext, y_ext, _, _, w = get_ext_w_2d_inter_grid(d['x_obs'], d['y_obs'],
+        x_ext, _y_ext, _, _, _w = get_ext_w_2d_inter_grid(d['x_obs'], d['y_obs'],
                                                         d['x_err'], d['y_err'],
                                                         3)
         assert x_ext.shape == (2, 9)

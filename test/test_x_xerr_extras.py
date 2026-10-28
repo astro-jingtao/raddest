@@ -43,7 +43,7 @@ class TestNfFitVariants:
                                                n_node=5,
                                                verbose=False,
                                                early_stop=False)
-        x_gen, x_err_gen, x_obs_gen = gen_xobs_trans_neglogplus(
+        _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans_neglogplus(
             flow, 100, 0.5, 3.5, 0.0, 0.5, params)
         assert np.asarray(x_obs_gen).shape == (100, )
 
@@ -58,7 +58,7 @@ class TestNfFitVariants:
                                                  n_node=5,
                                                  verbose=False,
                                                  early_stop=False)
-        x_gen, x_err_gen, x_obs_gen = gen_xobs_trans_log_rotation(
+        _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans_log_rotation(
             flow, 100, 0.5, 3.5, 0.0, 0.5, params)
         assert np.asarray(x_obs_gen).shape == (100, )
 
@@ -77,7 +77,7 @@ class TestGenXobsTransWrappers:
                     n_train=5,
                     n_node=5,
                     early_stop=False)
-        x_gen, x_err_gen, x_obs_gen = gen_xobs_trans(flow_vi.flow,
+        _x_gen, _x_err_gen, x_obs_gen = gen_xobs_trans(flow_vi.flow,
                                                      50,
                                                      0.5,
                                                      3.5,
@@ -241,7 +241,7 @@ class TestFindUVBounds:
 class TestConstructXXerrWMethods:
 
     def test_inter_grid(self):
-        x_ext, x_err_ext, w = construct_x_xerr_w(jnp.asarray([1.0, 2.0]),
+        x_ext, _x_err_ext, _w = construct_x_xerr_w(jnp.asarray([1.0, 2.0]),
                                                  jnp.asarray([0.1, 0.2]),
                                                  n_node=6,
                                                  int_method='inter_grid')

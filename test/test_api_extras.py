@@ -30,7 +30,7 @@ class TestToEachPieceParams:
     def test_student_t_variant(self):
         # (b0, x0, k1, k2, dx1, df, sig)
         params = [0.0, 1.0, 2.0, 3.0, 0.5, 7.0, 0.1]
-        k_lst, b_lst, _x_lst, sig, df = to_each_piece_params_studentT(2, params)
+        k_lst, _b_lst, _x_lst, sig, df = to_each_piece_params_studentT(2, params)
         assert list(k_lst) == [2.0, 3.0]
         assert df == 7.0
         assert sig == 0.1
@@ -56,12 +56,12 @@ class TestGetShift:
 class TestFlowVIBranches:
 
     def test_transfer_params_ignored_warning(self, capsys):
-        flow_vi = FlowVI(x_min=0,
-                         x_max=10,
-                         x_err_min=0,
-                         x_err_max=10,
-                         transfer=None,
-                         transfer_params=[1, 1])
+        _flow_vi = FlowVI(x_min=0,
+                          x_max=10,
+                          x_err_min=0,
+                          x_err_max=10,
+                          transfer=None,
+                          transfer_params=[1, 1])
         assert 'ignored' in capsys.readouterr().out
 
     def test_transfer_without_params_raises(self):

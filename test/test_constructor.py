@@ -147,7 +147,7 @@ class TestSteps:
             return (jnp.asarray([1e6, -1e6, 1e6, -1e6]), )
 
         step = construct_linear_student_t_step(d_log_lik)
-        k, b, df, sig = step(
+        _k, _b, df, sig = step(
             (jnp.asarray(1.0), jnp.asarray(1.0), jnp.asarray(1.0),
              jnp.asarray(1.0)), None, None, None, lr=1.0)
         assert float(df) == pytest.approx(1e2)
@@ -208,7 +208,7 @@ class TestGeneratorCond:
         y_kdt = np.linspace(0, 10, 50)
         y_err_kdt = np.linspace(0.1, 0.5, 50)
 
-        y_pred, y_err_pred, y_obs_pred = generator_cond(x, y_kdt, y_err_kdt,
+        y_pred, _y_err_pred, y_obs_pred = generator_cond(x, y_kdt, y_err_kdt,
                                                         (2.0, 1.0),
                                                         y_min=0.0,
                                                         y_max=10.0)
@@ -230,8 +230,8 @@ class TestGeneratorCond:
         compare = construct_ks_compare(generator_cond, x_gen, x_gen, y_kdt,
                                        y_err_kdt, x_obs, y_obs)
         np.random.seed(0)
-        D_good, p_good = compare(2.0, 1.0)
-        D_bad, p_bad = compare(5.0, 1.0)
+        D_good, _p_good = compare(2.0, 1.0)
+        D_bad, _p_bad = compare(5.0, 1.0)
         assert D_good < D_bad
 
 
