@@ -1,3 +1,7 @@
+"""Gauss-Hermite quadrature node/weight generator for 1D and product dims."""
+
+from __future__ import annotations
+
 import itertools
 
 import numpy as np
@@ -14,7 +18,7 @@ class GaussHermiteQuadrature:
         to evaluate an integral.
     """
 
-    def __init__(self, dim: np.int32, nodes: np.int32):
+    def __init__(self, dim: np.int32, nodes: np.int32) -> None:
         """
             :param dim: The dimension of the function, integer
             :param nodes: The number of nodes required, integer
@@ -31,14 +35,14 @@ class GaussHermiteQuadrature:
 
             self.derive_ghw_nd()
 
-    def derive_ghw_1d(self):
+    def derive_ghw_1d(self) -> None:
         """
             Computes the node values and weights required.
         """
 
         self.X, self.W = hermgauss(deg=self.N)
 
-    def derive_ghw_nd(self):
+    def derive_ghw_nd(self) -> None:
         """
             Computes a matrix of quadrature nodes and a vector of corresponding weights.
         """

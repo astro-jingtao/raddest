@@ -33,7 +33,7 @@ def nf_fit_frame(  # noqa: PLR0913
         v_ext: jax.Array,
         w: jax.Array,
         params: list,
-        optimizer,
+        optimizer: optax.GradientTransformation,
         *,
         update_params: Callable,
         log_likelihood: Callable,
@@ -105,7 +105,8 @@ def find_uv_bounds(_bijector_info: tuple) -> tuple | None:
     return None  # If not 'Chain' or 'ShiftBounds'，return None
 
 
-def construct_nf_fit_func(optimizer, flow: Flow) -> tuple[Callable, Callable]:
+def construct_nf_fit_func(optimizer: optax.GradientTransformation,
+                           flow: Flow) -> tuple[Callable, Callable]:
     '''
     u_ext and v_ext are transformed value
     x_min, x_max, x_err_min, x_err_max are for original value
@@ -120,7 +121,8 @@ def construct_nf_fit_func(optimizer, flow: Flow) -> tuple[Callable, Callable]:
     u_min, u_max, v_min, v_max = uv_bounds
 
     @jit
-    def gaussian_nf(params, u_ext, v_ext, w):
+    def gaussian_nf(params: list, u_ext: jax.Array, v_ext: jax.Array,
+                    w: jax.Array) -> jax.Array:
         s1, s2 = u_ext.shape
         _nf_logpdf = nf_logpdf(params, u_ext.flatten(), v_ext.flatten())
         cond = w > 0
@@ -129,7 +131,7 @@ def construct_nf_fit_func(optimizer, flow: Flow) -> tuple[Callable, Callable]:
                          axis=1)
 
     @jit
-    def nf_logpdf(params, u, v):
+    def nf_logpdf(params: list, u: jax.Array, v: jax.Array) -> jax.Array:
         # we need inner where
         # https://jax.readthedocs.io/en/latest/faq.html#gradients-contain-nan-where-using-where
         cond = (u > u_min) & (u < u_max) & (v > v_min) & (v < v_max)
@@ -139,18 +141,20 @@ def construct_nf_fit_func(optimizer, flow: Flow) -> tuple[Callable, Callable]:
                        jnp.clip(v, v_min, v_max)), -10)
 
     @jit
-    def _nf_logpdf(params, u, v):
+    def _nf_logpdf(params: list, u: jax.Array, v: jax.Array) -> jax.Array:
         return flow._log_prob(params, jnp.c_[u, v],
                               jnp.zeros(shape=(u.shape[0], 1)))
 
     @jit
-    def log_likelihood(params, u_ext, v_ext, w):
+    def log_likelihood(params: list, u_ext: jax.Array, v_ext: jax.Array,
+                       w: jax.Array) -> jax.Array:
         return -jnp.mean(gaussian_nf(params, u_ext, v_ext, w))
 
     d_log_likelihood = jit(grad(log_likelihood, argnums=(0, )))
 
     @jit
-    def update_params(params, opt_state, u_ext, v_ext, w):
+    def update_params(params: list, opt_state: optax.OptState, u_ext: jax.Array,
+                      v_ext: jax.Array, w: jax.Array) -> tuple:
         d_params = d_log_likelihood(params, u_ext, v_ext, w)[0]
         updates, opt_state = optimizer.update(d_params, opt_state, params)
         params = optax.apply_updates(params, updates)
@@ -352,7 +356,7 @@ def nf_fit_general(  # noqa: PLR0913
         x_obs: ArrayLike,
         x_err: ArrayLike,
         *,
-        optimizer,
+        optimizer: optax.GradientTransformation,
         n_pre: int = 100,
         n_train: int = 500,
         n_node: int = 21,
@@ -560,6 +564,8 @@ def gen_xobs_trans_neglogplus_xshift(
     return_numpy: bool = False,
 ) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
            jax.Array | np.ndarray]:
+    '''gen_xobs_trans with the NegLogPlusXShift transform:
+    log(x/x_median + 1) + shift.'''
     # NegLogPlusXShift
     # log(x/x_median + 1) + shift
     return gen_xobs_trans(flow,
@@ -585,6 +591,8 @@ def gen_xobs_trans_xshift_neglogplus(
     return_numpy: bool = False,
 ) -> tuple[jax.Array | np.ndarray, jax.Array | np.ndarray,
            jax.Array | np.ndarray]:
+    '''gen_xobs_trans with the XShiftNegLogPlus transform:
+    log((x + shift)/x_median + 1).'''
     # XShiftNegLogPlus
     # log((x + shift)/x_median + 1)
     return gen_xobs_trans(flow,
