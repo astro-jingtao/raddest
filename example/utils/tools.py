@@ -1,7 +1,12 @@
+"""Array hygiene helpers shared by the example linear-model fits."""
+
+from __future__ import annotations
+
 import numpy as np
+from numpy.typing import ArrayLike
 
 
-def flag_bad(x):
+def flag_bad(x: ArrayLike) -> np.ndarray:
     """
     It returns True if the input is NaN or Inf, and False otherwise
 
@@ -12,7 +17,9 @@ def flag_bad(x):
     return np.isnan(x) | np.isinf(x)
 
 
-def remove_bad(xs):
+def remove_bad(xs: list) -> list:
+    """Drop rows flagged bad in any array of the list (bad = NaN/Inf; 2D
+    arrays flag per row)."""
     if xs[0].ndim == 1:
         n_sample = len(xs[0])
     else:
@@ -26,5 +33,6 @@ def remove_bad(xs):
     return [x[~bad] for x in xs]
 
 
-def all_asarray(xs):
+def all_asarray(xs: list) -> list:
+    """np.asarray every entry of the list."""
     return [np.asarray(x) for x in xs]

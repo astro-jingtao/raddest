@@ -1,26 +1,40 @@
+"""Classic linear fits (OLS/WLS/ODR) used as references in the example
+notebooks."""
+
+from __future__ import annotations
+
+from typing import Any, Callable
+
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.odr import ODR, Data, Model
 import statsmodels.api as sm
 
 from .tools import all_asarray, remove_bad
 
 
-def get_linear_model(k, b):
-
-    def func(x):
+def get_linear_model(k: float, b: float) -> Callable:
+    '''Closure computing y = k x + b.'''
+    def func(x: ArrayLike) -> np.ndarray:
         return k * x + b
 
     return func
 
 
-def preprocess(xs):
+def preprocess(xs: list) -> list:
     '''
     allasarray + remove_bad
     '''
     return remove_bad(all_asarray(xs))
 
 
-def xy2logxy(x, y, x_err, y_err):
+def xy2logxy(
+    x: ArrayLike,
+    y: ArrayLike,
+    x_err: ArrayLike,
+    y_err: ArrayLike,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    '''Transform (x, y, x_err, y_err) to log10 space with error propagation.'''
     logx = np.log10(x)
     logy = np.log10(y)
     logx_err = x_err / (x * np.log(10))
@@ -28,7 +42,9 @@ def xy2logxy(x, y, x_err, y_err):
     return logx, logy, logx_err, logy_err
 
 
-def get_OLS(x, y, return_res=False):
+def get_OLS(x: ArrayLike, y: ArrayLike, return_res: bool = False) -> Any:
+    '''Ordinary least squares y = kx + b; returns the statsmodels results when
+    return_res, else a dict with k/b (value, err), residual std, and func.'''
     # y = kx + b
     x, y = preprocess([x, y])
 
@@ -49,7 +65,10 @@ def get_OLS(x, y, return_res=False):
     return {'k': (k, k_err), 'b': (b, b_err), 'std': std, 'func': func}
 
 
-def get_WLS(x, y, y_err, return_res=False):
+def get_WLS(x: ArrayLike, y: ArrayLike, y_err: ArrayLike,
+            return_res: bool = False) -> Any:
+    '''Weighted least squares y = kx + b with 1/y_err^2 weights; returns as
+    get_OLS does.'''
     # y = kx + b
     x, y, y_err = preprocess([x, y, y_err])
 
@@ -70,11 +89,18 @@ def get_WLS(x, y, y_err, return_res=False):
     return {'k': (k, k_err), 'b': (b, b_err), 'std': std, 'func': func}
 
 
-def get_ODR(x, y, x_err=None, y_err=None, return_res=False):
+def get_ODR(x: ArrayLike,
+            y: ArrayLike,
+            x_err: ArrayLike | None = None,
+            y_err: ArrayLike | None = None,
+            return_res: bool = False) -> Any:
+    '''Orthogonal distance regression y = kx + b with errors on both axes;
+    returns the ODR output when return_res, else a dict with k/b (value,
+    err), per-axis residual stds, and both direction functions.'''
 
     # https://docs.scipy.org/doc/scipy/reference/odr.html
 
-    def f(B, x):
+    def f(B: ArrayLike, x: ArrayLike) -> np.ndarray:
         return B[0] * x + B[1]
 
     if x_err is None:

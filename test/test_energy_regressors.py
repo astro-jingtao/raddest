@@ -176,7 +176,7 @@ class TestEnergyPTHierarchy:
     def test_jax_backend_requires_func_x2y_jax(self):
         class NoJaxPT(RegressorEnergyPT):
 
-            def __init__(self):
+            def __init__(self) -> None:
                 RegressorEnergyPT.__init__(
                     self,
                     None,

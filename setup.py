@@ -1,3 +1,5 @@
+"""Package setup for raddest."""
+
 from setuptools import find_packages, setup
 
 setup(
