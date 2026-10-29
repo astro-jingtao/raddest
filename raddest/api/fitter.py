@@ -1,4 +1,10 @@
+"""Fitter classes: likelihood-based (ML) and grid-search (KS / energy)
+regressors for the flow-based (x, y) regression models."""
+
+from __future__ import annotations
+
 from functools import partial
+from typing import TYPE_CHECKING, Callable
 
 import emcee
 import jax
@@ -7,6 +13,7 @@ import jax.numpy as jnp
 from jax.scipy.stats import norm, t as student_t
 from ndtest.ksnd import ks2d2s
 import numpy as np
+from numpy.typing import ArrayLike
 import optax
 from scipy.stats import qmc, t as student_t_scipy
 
@@ -55,21 +62,31 @@ from raddest.reg.ks import (
 )
 from raddest.reg.map import get_w_add_lognorm, get_xyw_trans
 
+if TYPE_CHECKING:
+    from raddest.api.flowvi import FlowVI
+
 
 class RegressorBase:
+    '''Common base: holds the two axis flows and the conditional generator.'''
 
-    def __init__(self, xflow, yflow, func_x2y=None):
+    def __init__(self,
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 func_x2y: Callable | None = None) -> None:
+        '''Store the flows and build the conditional generator from func_x2y.'''
         self.xflow = xflow
         self.yflow = yflow
 
         self.set_generator_cond(func_x2y)
 
-    def _set_range(self,
-                   x_range,
-                   x_err_range,
-                   y_range,
-                   y_err_range,
-                   return_numpy=False):
+    def _set_range(
+        self,
+        x_range: tuple[float, float] | None,
+        x_err_range: tuple[float, float] | None,
+        y_range: tuple[float, float] | None,
+        y_err_range: tuple[float, float] | None,
+        return_numpy: bool = False,
+    ) -> tuple:
 
         if x_range is None:
             x_range = [self.xflow.x_min, self.xflow.x_max]
@@ -88,25 +105,29 @@ class RegressorBase:
 
         return x_range, x_err_range, y_range, y_err_range
 
-    def set_generator_cond(self, func_x2y):
+    def set_generator_cond(self, func_x2y: Callable | None) -> None:
+        '''Build self.generator_cond (or reset it to None).'''
         if func_x2y is not None:
             self.generator_cond = construct_generator_cond(func_x2y)
         else:
             self.generator_cond = None
 
-    def _check_generator_cond(self):
+    def _check_generator_cond(self) -> None:
         if self.generator_cond is None:
             raise ValueError(
                 "No conditional generator is not set. Please set it use `self.set_generator_cond()` first."
             )
 
     def sample(self,
-               params,
-               N=10000,
-               x_range=None,
-               x_err_range=None,
-               y_range=None,
-               y_err_range=None):
+               params: ArrayLike,
+               N: int = 10000,
+               *,
+               x_range: tuple[float, float] | None = None,
+               x_err_range: tuple[float, float] | None = None,
+               y_range: tuple[float, float] | None = None,
+               y_err_range: tuple[float, float] | None = None,
+               ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+                          np.ndarray, np.ndarray]:
         '''
         Generate N data points.
         
@@ -173,17 +194,20 @@ class RegressorBase:
 
         return x_obs_gen, y_obs_gen, x_err_gen, y_err_gen, x_gen, y_gen
 
-    def ks_test(self,
-                params,
-                x_obs,
-                y_obs,
-                N=10000,
-                M=None,
-                K=1,
-                x_range=None,
-                x_err_range=None,
-                y_range=None,
-                y_err_range=None):
+    def ks_test(  # noqa: PLR0913 — model params, observed pair, and the three test controls plus four generation ranges
+                self,
+                params: ArrayLike,
+                x_obs: np.ndarray,
+                y_obs: np.ndarray,
+                *,
+                N: int = 10000,
+                M: int | None = None,
+                K: int = 1,
+                x_range: tuple[float, float] | None = None,
+                x_err_range: tuple[float, float] | None = None,
+                y_range: tuple[float, float] | None = None,
+                y_err_range: tuple[float, float] | None = None,
+                ) -> tuple[float, float] | tuple[list[float], list[float]]:
         """
         Perform 2D-KS test with K times of iterations. N data points are generated, and M observed data points are selected for each iteration.
 
@@ -257,18 +281,21 @@ class RegressorBase:
 
         return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
 
-    def energy_test(self,
-                    params,
-                    x_obs,
-                    y_obs,
-                    N=10000,
-                    M=None,
-                    K=1,
-                    permutations=200,
-                    x_range=None,
-                    x_err_range=None,
-                    y_range=None,
-                    y_err_range=None):
+    def energy_test(  # noqa: PLR0913 — ks_test's bundle plus the permutation count
+                    self,
+                    params: ArrayLike,
+                    x_obs: np.ndarray,
+                    y_obs: np.ndarray,
+                    *,
+                    N: int = 10000,
+                    M: int | None = None,
+                    K: int = 1,
+                    permutations: int = 200,
+                    x_range: tuple[float, float] | None = None,
+                    x_err_range: tuple[float, float] | None = None,
+                    y_range: tuple[float, float] | None = None,
+                    y_err_range: tuple[float, float] | None = None,
+                    ) -> tuple[float, float] | tuple[list[float], list[float]]:
         """
         Run the energy two-sample test with K iterations between synthetic data
         generated from `params` and the observed data. N data points are
@@ -353,16 +380,18 @@ class RegressorBase:
 
 # TODO: cache x_ext, y_ext, w ?
 class RegressorML(RegressorBase):
+    '''Likelihood-based regressor: jit-compiled likelihood, gradient step,
+    trainer, and posterior tools built from a conditional probability.'''
 
     def __init__(self,
-                 xflow,
-                 yflow,
+                 xflow: FlowVI,
+                 yflow: FlowVI,
                  *,
-                 p_cond,
-                 step_constructor,
-                 get_w_add=None,
-                 func_x2y=None,
-                 log_prior=None):
+                 p_cond: Callable,
+                 step_constructor: Callable,
+                 get_w_add: Callable | None = None,
+                 func_x2y: Callable | None = None,
+                 log_prior: Callable | None = None) -> None:
         '''
         log_prior: callable, log_prior(params) -> log(P(params))
         '''
@@ -381,7 +410,9 @@ class RegressorML(RegressorBase):
         self.log_prior = log_prior if log_prior is not None else lambda params: 0.0
 
         @jit
-        def _log_posterior_ext(params, x_ext, y_ext, w, n_sample):
+        def _log_posterior_ext(params: jax.Array, x_ext: jax.Array,
+                               y_ext: jax.Array, w: jax.Array,
+                               n_sample: int) -> jax.Array:
             # we use the mean of the log-likelihood as the loss
             # here we multiply the number of samples to get the truu log-likelihood
             return self._log_likelihood_ext(
@@ -391,20 +422,25 @@ class RegressorML(RegressorBase):
         self._v_log_posterior_ext = vmap(_log_posterior_ext,
                                          in_axes=(0, None, None, None, None))
 
-    def get_ext_data(self,
-                     x_obs,
-                     x_err,
-                     y_obs,
-                     y_err,
-                     n=21,
-                     x_range=None,
-                     x_err_range=None,
-                     y_range=None,
-                     y_err_range=None,
-                     flow_batch_size=None,
-                     kde_batch_size=None,
-                     ignore_y_err_c_y=False,
-                     int_method='ghq'):
+    def get_ext_data(  # noqa: PLR0913 — the data quartet plus every integration knob of get_xyw_trans
+                     self,
+                     x_obs: ArrayLike,
+                     x_err: ArrayLike,
+                     y_obs: ArrayLike,
+                     y_err: ArrayLike,
+                     *,
+                     n: int = 21,
+                     x_range: tuple[float, float] | None = None,
+                     x_err_range: tuple[float, float] | None = None,
+                     y_range: tuple[float, float] | None = None,
+                     y_err_range: tuple[float, float] | None = None,
+                     flow_batch_size: int | None = None,
+                     kde_batch_size: int | None = None,
+                     ignore_y_err_c_y: bool = False,
+                     int_method: str = 'ghq',
+                     ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        '''Integration points and weights via get_xyw_trans (ranges default
+        from the flows).'''
 
         x_range, x_err_range, y_range, y_err_range = self._set_range(
             x_range, x_err_range, y_range, y_err_range)
@@ -433,7 +469,11 @@ class RegressorML(RegressorBase):
 
         return x_ext, y_ext, w
 
-    def get_cov(self, x_obs, x_err, y_obs, y_err, params, **kwargs):
+    def get_cov(self, x_obs: ArrayLike, x_err: ArrayLike, y_obs: ArrayLike,
+                y_err: ArrayLike, params: ArrayLike,
+                **kwargs: ArrayLike) -> jax.Array:
+        '''Covariance from the negative inverse Hessian of the log-likelihood,
+        scaled per sample.'''
 
         # make sure params is a jnp array
         # it will affect the shape of the hessian
@@ -448,7 +488,10 @@ class RegressorML(RegressorBase):
         # here we divide the number of samples to get the true covariance
         return -jnp.linalg.inv(hessian[0][0]) / n_sample
 
-    def log_likelihood(self, x_obs, x_err, y_obs, y_err, params, **kwargs):
+    def log_likelihood(self, x_obs: ArrayLike, x_err: ArrayLike,
+                       y_obs: ArrayLike, y_err: ArrayLike, params: ArrayLike,
+                       **kwargs: ArrayLike) -> jax.Array:
+        '''Total (per-sample-scaled) log-likelihood on the integration grid.'''
 
         x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
                                             **kwargs)
@@ -460,7 +503,10 @@ class RegressorML(RegressorBase):
         return self._v_log_likelihood_ext(self._get_v_params(params), x_ext,
                                           y_ext, w) * n_sample
 
-    def log_posterior(self, x_obs, x_err, y_obs, y_err, params, **kwargs):
+    def log_posterior(self, x_obs: ArrayLike, x_err: ArrayLike,
+                      y_obs: ArrayLike, y_err: ArrayLike, params: ArrayLike,
+                      **kwargs: ArrayLike) -> jax.Array:
+        '''Log-likelihood plus log_prior on the integration grid.'''
 
         x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
                                             **kwargs)
@@ -468,18 +514,22 @@ class RegressorML(RegressorBase):
         return self._v_log_posterior_ext(self._get_v_params(params), x_ext,
                                          y_ext, w, n_sample)
 
-    def fit(self,
-            x_obs,
-            x_err,
-            y_obs,
-            y_err,
-            params_0,
-            lr=1e-3,
-            n_step=1_000_000,
-            atol=1e-3,
-            rtol=1e-3,
-            verbose=False,
-            **kwargs) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def fit(  # noqa: PLR0913 — data quartet, init params, and the four optimizer controls
+            self,
+            x_obs: ArrayLike,
+            x_err: ArrayLike,
+            y_obs: ArrayLike,
+            y_err: ArrayLike,
+            *,
+            params_0: ArrayLike,
+            lr: float = 1e-3,
+            n_step: int = 1_000_000,
+            atol: float = 1e-3,
+            rtol: float = 1e-3,
+            verbose: bool = False,
+            **kwargs: ArrayLike) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        '''Gradient fit via the compiled trainer; returns (params_ml,
+        params_std, cov).'''
 
         params_ml: jnp.ndarray
         params_std: jnp.ndarray
@@ -506,14 +556,17 @@ class RegressorML(RegressorBase):
         return params_ml, params_std, cov
 
     def get_posterior_qmc(self,
-                          x_obs,
-                          x_err,
-                          y_obs,
-                          y_err,
-                          l_bounds,
-                          u_bounds,
-                          m=15,
-                          **kwargs):
+                          x_obs: ArrayLike,
+                          x_err: ArrayLike,
+                          y_obs: ArrayLike,
+                          y_err: ArrayLike,
+                          *,
+                          l_bounds: ArrayLike,
+                          u_bounds: ArrayLike,
+                          m: int = 15,
+                          **kwargs: ArrayLike) -> tuple[np.ndarray, jax.Array]:
+        '''Sobol-QMC posterior grid over [l_bounds, u_bounds] with importance
+        weights exp(log_posterior - max).'''
 
         if len(l_bounds) != len(u_bounds):
             raise ValueError(
@@ -531,19 +584,21 @@ class RegressorML(RegressorBase):
 
         return params_grid, weight
 
-    def get_posterior_mcmc(self,
-                           x_obs,
-                           x_err,
-                           y_obs,
-                           y_err,
+    def get_posterior_mcmc(  # noqa: PLR0913 — data quartet, sampler state, and the emcee controls
+                           self,
+                           x_obs: ArrayLike,
+                           x_err: ArrayLike,
+                           y_obs: ArrayLike,
+                           y_err: ArrayLike,
                            *,
-                           ndim,
-                           initial_state,
-                           nsteps=10000,
-                           sampler_kwargs=None,
-                           run_mcmc_kwargs=None,
-                           sampler=None,
-                           **kwargs) -> emcee.EnsembleSampler:
+                           ndim: int,
+                           initial_state: ArrayLike,
+                           nsteps: int = 10000,
+                           sampler_kwargs: dict | None = None,
+                           run_mcmc_kwargs: dict | None = None,
+                           sampler: emcee.EnsembleSampler | None = None,
+                           **kwargs: ArrayLike) -> emcee.EnsembleSampler:
+        '''Run emcee on the log posterior over the pre-computed grid.'''
 
         if sampler_kwargs is None:
             sampler_kwargs = {}
@@ -554,7 +609,7 @@ class RegressorML(RegressorBase):
         x_ext, y_ext, w = self.get_ext_data(x_obs, x_err, y_obs, y_err,
                                             **kwargs)
 
-        def log_prob_target(params):
+        def log_prob_target(params: jax.Array) -> jax.Array:
             n_sample = x_obs.size
             log_p = self._v_log_posterior_ext(self._get_v_params(params),
                                               x_ext, y_ext, w, n_sample)
@@ -575,7 +630,7 @@ class RegressorML(RegressorBase):
 
         return sampler
 
-    def _get_v_params(self, params):
+    def _get_v_params(self, params: ArrayLike) -> jax.Array:
         params = jnp.asarray(params)
         if params.ndim == 1:
             params = params[None, :]
@@ -583,15 +638,19 @@ class RegressorML(RegressorBase):
 
 
 class LogLinearML(RegressorML):
+    '''Log-linear ML regressor: y = 10^(k log10 x + b + sig * eps).'''
 
-    def __init__(self, xflow, yflow, log_prior=None):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI,
+                 log_prior: Callable | None = None) -> None:
+        '''p_cond: lognormal of log10 y around the log-linear prediction.'''
 
         @jit
-        def loglinear_jax(x, params):
+        def loglinear_jax(x: jax.Array, params: jax.Array) -> jax.Array:
             return params[0] * jnp.log10(jnp.abs(x)) + params[1]
 
         @jit
-        def lognorm(x, y, params):
+        def lognorm(x: jax.Array, y: jax.Array,
+                    params: jax.Array) -> jax.Array:
             '''
             params: (...), sig
 
@@ -610,7 +669,7 @@ class LogLinearML(RegressorML):
 
         if log_prior is None:
 
-            def log_prior(params):
+            def log_prior(params: jax.Array) -> jax.Array:
                 return jnp.where(params[-1] <= 0, -jnp.inf, 0)
 
         super().__init__(xflow,
@@ -623,10 +682,15 @@ class LogLinearML(RegressorML):
 
 
 class SaturatedLogLinearML(RegressorML):
+    '''Saturated log-linear ML regressor (smooth exponential tails around a
+    linear core in log10 space).'''
 
-    def __init__(self, xflow, yflow, width=0.1, log_prior=None):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI, width: float = 0.1,
+                 log_prior: Callable | None = None) -> None:
+        '''width: sigmoid transition width of saturated_linear_smooth.'''
 
-        def saturated_loglinear_scatter(x, params):
+        def saturated_loglinear_scatter(x: ArrayLike,
+                                        params: ArrayLike) -> np.ndarray:
             params_loglinear = params[:-1]
             sig = params[-1]
             k, b, x0, x1, c0, c1 = params_loglinear
@@ -642,7 +706,8 @@ class SaturatedLogLinearML(RegressorML):
                 10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
 
         @jit
-        def saturated_loglinear_jax(x, params):
+        def saturated_loglinear_jax(x: jax.Array,
+                                    params: jax.Array) -> jax.Array:
             '''
             params: (k, b, x0, x1, c0, c1)
             '''
@@ -658,7 +723,8 @@ class SaturatedLogLinearML(RegressorML):
             return log10_y_pred
 
         @jit
-        def lognorm(x, y, params):
+        def lognorm(x: jax.Array, y: jax.Array,
+                    params: jax.Array) -> jax.Array:
             return jnp.where(
                 (x < 0) | (y < 0), 0,
                 norm.pdf(jnp.log10(jnp.abs(y)),
@@ -667,7 +733,7 @@ class SaturatedLogLinearML(RegressorML):
 
         if log_prior is None:
 
-            def log_prior(params):
+            def log_prior(params: jax.Array) -> jax.Array:
                 k, _b, x0, x1, c0, c1, sig = params
                 is_bad = (sig <= 0) | (x0 > x1) | ((c1 - c0) * k < 0)
                 return jnp.where(is_bad, -jnp.inf, 0)
@@ -682,21 +748,27 @@ class SaturatedLogLinearML(RegressorML):
 
 
 class PiecewiseLogLinearML(RegressorML):
+    '''Piecewise log-linear ML regressor with n_piece sigmoid-blended
+    segments.'''
 
     def __init__(self,
-                 xflow,
-                 yflow,
-                 n_piece,
-                 width=0.05,
-                 A_eq=None,
-                 b_eq=None,
-                 log_prior=None):
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 n_piece: int,
+                 *,
+                 width: float = 0.05,
+                 A_eq: ArrayLike | None = None,
+                 b_eq: ArrayLike | None = None,
+                 log_prior: Callable | None = None) -> None:
+        '''A_eq/b_eq optionally constrain updates to the hyperplane
+        A_eq @ params + b_eq = 0.'''
 
         self.n_piece = n_piece
         piecewise_linear = generate_piecewise_linear(n_piece)
         piecewise_linear_jax = generate_piecewise_linear_jax(n_piece)
 
-        def piecewise_loglinear_scatter(x, params):
+        def piecewise_loglinear_scatter(x: ArrayLike,
+                                        params: ArrayLike) -> np.ndarray:
 
             sig = params[-1]
             b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-1])
@@ -710,7 +782,8 @@ class PiecewiseLogLinearML(RegressorML):
                 10, log10_y_pred + np.random.normal(scale=sig, size=x.shape))
 
         @jit
-        def piecewise_loglinear_jax(x, params):
+        def piecewise_loglinear_jax(x: jax.Array,
+                                    params: jax.Array) -> jax.Array:
             '''
             params: (b0, x0) + k_lst + dx_lst
             '''
@@ -725,7 +798,8 @@ class PiecewiseLogLinearML(RegressorML):
             return log10_y_pred
 
         @jit
-        def lognorm(x, y, params):
+        def lognorm(x: jax.Array, y: jax.Array,
+                    params: jax.Array) -> jax.Array:
             # print(len(params))
             return jnp.where(
                 (x < 0) | (y < 0), 0,
@@ -735,7 +809,7 @@ class PiecewiseLogLinearML(RegressorML):
 
         if log_prior is None:
 
-            def log_prior(params):
+            def log_prior(params: jax.Array) -> jax.Array:
                 sig = params[-1]
                 _, _, _, dx_lst = self.parse_piecewise_params(params[:-1])
                 is_bad = jnp.any(dx_lst <= 0) | (sig <= 0)
@@ -750,30 +824,37 @@ class PiecewiseLogLinearML(RegressorML):
                          func_x2y=piecewise_loglinear_scatter,
                          log_prior=log_prior)
 
-    def parse_piecewise_params(self, params):
+    def parse_piecewise_params(self, params: ArrayLike) -> tuple:
+        '''Split flat params into (b0, x0, k_lst, dx_lst).'''
         return _parse_piecewise_params(self.n_piece, params)
 
-    def to_each_piece_params(self, params):
+    def to_each_piece_params(self, params: ArrayLike) -> tuple:
+        '''Regroup flat params per segment.'''
         return _to_each_piece_params(self.n_piece, params)
 
 
 # TODO: to implement
 class PiecewiseLogLinearStudentTML(RegressorML):
+    '''Piecewise log-linear ML regressor with student-t scatter (TODO:
+    incomplete — instantiating currently raises NameError; see TODO.md).'''
 
     def __init__(self,
-                 xflow,
-                 yflow,
-                 n_piece,
-                 width=0.05,
-                 A_eq=None,
-                 b_eq=None,
-                 log_prior=None):
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 n_piece: int,
+                 *,
+                 width: float = 0.05,
+                 A_eq: ArrayLike | None = None,
+                 b_eq: ArrayLike | None = None,
+                 log_prior: Callable | None = None) -> None:
+        '''Same layout as PiecewiseLogLinearML with a student-t scatter.'''
 
         self.n_piece = n_piece
         piecewise_linear = generate_piecewise_linear(n_piece)
         piecewise_linear_jax = generate_piecewise_linear_jax(n_piece)
 
-        def piecewise_loglinear_scatter(x, params):
+        def piecewise_loglinear_scatter(x: ArrayLike,
+                                        params: ArrayLike) -> np.ndarray:
 
             df, sig = params[-2:]
             b0, x0, k_lst, dx_lst = self.parse_piecewise_params(params[:-2])
@@ -788,7 +869,8 @@ class PiecewiseLogLinearStudentTML(RegressorML):
                 student_t_scipy.rvs(df, scale=sig, size=x.shape))
 
         @jit
-        def piecewise_loglinear_jax(x, params):
+        def piecewise_loglinear_jax(x: jax.Array,
+                                    params: jax.Array) -> jax.Array:
             '''
             params: (b0, x0) + k_lst + dx_lst
             '''
@@ -803,7 +885,8 @@ class PiecewiseLogLinearStudentTML(RegressorML):
             return log10_y_pred
 
         @jit
-        def logstudent_t(x, y, params):
+        def logstudent_t(x: jax.Array, y: jax.Array,
+                         params: jax.Array) -> jax.Array:
             # print(len(params))
             return jnp.where(
                 (x < 0) | (y < 0), 0,
@@ -814,7 +897,7 @@ class PiecewiseLogLinearStudentTML(RegressorML):
 
         if log_prior is None:
 
-            def log_prior(params):
+            def log_prior(params: jax.Array) -> jax.Array:
                 df, sig = params[-2:]
                 _, _, _, dx_lst = self.parse_piecewise_params(params[:-2])
                 is_bad = jnp.any(dx_lst <= 0) | (sig <= 0) | (df <= 0)
@@ -831,24 +914,29 @@ class PiecewiseLogLinearStudentTML(RegressorML):
             func_x2y=piecewise_loglinear_scatter,
             log_prior=log_prior)
 
-    def parse_piecewise_params(self, params):
+    def parse_piecewise_params(self, params: ArrayLike) -> tuple:
+        '''Split flat params into (b0, x0, k_lst, dx_lst).'''
         return _parse_piecewise_params(self.n_piece, params)
 
-    def to_each_piece_params(self, params):
+    def to_each_piece_params(self, params: ArrayLike) -> tuple:
+        '''Regroup flat params per segment (student-t layout).'''
         return _to_each_piece_params_studentT(self.n_piece, params)
 
 
 class LogLinearStudentTML(RegressorML):
-    # https://arxiv.org/abs/2411.02380
+    '''Log-linear student-t ML regressor (see arXiv:2411.02380).'''
 
-    def __init__(self, xflow, yflow, log_prior=None):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI,
+                 log_prior: Callable | None = None) -> None:
+        '''p_cond: student-t of log10 y around the log-linear prediction.'''
 
         @jit
-        def loglinear_jax(x, params):
+        def loglinear_jax(x: jax.Array, params: jax.Array) -> jax.Array:
             return params[0] * jnp.log10(jnp.abs(x)) + params[1]
 
         @jit
-        def logstudent_t(x, y, params):
+        def logstudent_t(x: jax.Array, y: jax.Array,
+                         params: jax.Array) -> jax.Array:
             '''
             params: (...), sig
 
@@ -868,7 +956,7 @@ class LogLinearStudentTML(RegressorML):
 
         if log_prior is None:
 
-            def log_prior(params):
+            def log_prior(params: jax.Array) -> jax.Array:
                 return jnp.where((params[-1] <= 0) | (params[-2] <= 0),
                                  -jnp.inf, 0)
 
@@ -883,15 +971,18 @@ class LogLinearStudentTML(RegressorML):
 
 
 class LinearML(RegressorML):
+    '''Linear ML regressor: y = k x + b + sig * eps.'''
 
-    def __init__(self, xflow, yflow):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI) -> None:
+        '''p_cond: gaussian of y around the linear prediction.'''
 
         @jit
-        def linear_jax(x, params):
+        def linear_jax(x: jax.Array, params: jax.Array) -> jax.Array:
             return params[0] * x + params[1]
 
         @jit
-        def linearnorm(x, y, params):
+        def linearnorm(x: jax.Array, y: jax.Array,
+                       params: jax.Array) -> jax.Array:
             '''
             params: (...), sig
 
@@ -935,13 +1026,14 @@ class RegressorKS(RegressorBase):
     compare_batch_constructor = None
 
     def __init__(self,
-                 xflow,
-                 yflow,
-                 func_x2y,
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 func_x2y: Callable,
                  *,
-                 parser,
-                 print_mean_std,
-                 gen_new_grid='mean_std'):
+                 parser: Callable,
+                 print_mean_std: Callable,
+                 gen_new_grid: str | Callable = 'mean_std') -> None:
+        '''gen_new_grid: 'mean_std', 'quantile', or a custom callable.'''
 
         if func_x2y is None:
             raise ValueError("No function to convert x to y is provided.")
@@ -963,12 +1055,14 @@ class RegressorKS(RegressorBase):
             self.gen_new_grid_name = 'custom'
             self.gen_new_grid = gen_new_grid
 
-    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+    def _set_gen_new_grid_kwargs(self,
+                                 gen_new_grid_kwargs: dict | None) -> dict:
         if gen_new_grid_kwargs is None:
             gen_new_grid_kwargs = {}
         return gen_new_grid_kwargs
 
-    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+    def _set_gen_new_grid_refine_kwargs(
+            self, gen_new_grid_refine_kwargs: dict | None) -> dict:
         if gen_new_grid_refine_kwargs is None:
             gen_new_grid_refine_kwargs = {}
 
@@ -977,24 +1071,26 @@ class RegressorKS(RegressorBase):
 
         return gen_new_grid_refine_kwargs
 
-    def fit(self,
-            x_obs,
-            y_obs,
+    def fit(  # noqa: PLR0913 — observed pair plus the full zoom-in grid control panel
+            self,
+            x_obs: ArrayLike,
+            y_obs: ArrayLike,
             *,
-            params_list,
-            N=1000,
-            x_range=None,
-            x_err_range=None,
-            y_range=None,
-            y_err_range=None,
-            num_process=10,
-            max_i=10,
-            rtol=1e-3,
-            atol=1e-3,
-            verbose=False,
-            refine=True,
-            gen_new_grid_kwargs=None,
-            gen_new_grid_refine_kwargs=None):
+            params_list: list,
+            N: int = 1000,
+            x_range: tuple[float, float] | None = None,
+            x_err_range: tuple[float, float] | None = None,
+            y_range: tuple[float, float] | None = None,
+            y_err_range: tuple[float, float] | None = None,
+            num_process: int = 10,
+            max_i: int = 10,
+            rtol: float = 1e-3,
+            atol: float = 1e-3,
+            verbose: bool = False,
+            refine: bool = True,
+            gen_new_grid_kwargs: dict | None = None,
+            gen_new_grid_refine_kwargs: dict | None = None,
+            ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Fit model parameters to observed data using grid-based search and refinement.
 
@@ -1156,12 +1252,14 @@ class _PositiveSigmaGridMixin:
 
     _range_par = [[-np.inf, np.inf], [-np.inf, np.inf], [0, np.inf]]
 
-    def _set_gen_new_grid_kwargs(self, gen_new_grid_kwargs):
+    def _set_gen_new_grid_kwargs(self,
+                                 gen_new_grid_kwargs: dict | None) -> dict:
         grid_kwargs = super()._set_gen_new_grid_kwargs(gen_new_grid_kwargs)
         grid_kwargs.setdefault('range_par', self._range_par)
         return grid_kwargs
 
-    def _set_gen_new_grid_refine_kwargs(self, gen_new_grid_refine_kwargs):
+    def _set_gen_new_grid_refine_kwargs(
+            self, gen_new_grid_refine_kwargs: dict | None) -> dict:
         grid_kwargs = super()._set_gen_new_grid_refine_kwargs(
             gen_new_grid_refine_kwargs)
         grid_kwargs.setdefault('range_par', self._range_par)
@@ -1169,8 +1267,11 @@ class _PositiveSigmaGridMixin:
 
 
 class LogLinearKS(_PositiveSigmaGridMixin, RegressorKS):
+    '''Log-linear regressor fitted by KS grid search.'''
 
-    def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI,
+                 gen_new_grid: str | Callable = 'mean_std') -> None:
+        '''KS grid search on the (k, b, sig) log-linear family.'''
 
         super().__init__(xflow,
                          yflow,
@@ -1181,8 +1282,11 @@ class LogLinearKS(_PositiveSigmaGridMixin, RegressorKS):
 
 
 class LinearKS(_PositiveSigmaGridMixin, RegressorKS):
+    '''Linear regressor fitted by KS grid search.'''
 
-    def __init__(self, xflow, yflow, gen_new_grid='mean_std'):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI,
+                 gen_new_grid: str | Callable = 'mean_std') -> None:
+        '''KS grid search on the (k, b, sig) linear family.'''
 
         super().__init__(xflow,
                          yflow,
@@ -1201,30 +1305,38 @@ class RegressorEnergyGrad(RegressorBase):
     `raddest.reg.energy.construct_energy_loss` for the exact loss form.
     """
 
-    def __init__(self, xflow, yflow, *, func_x2y, func_x2y_jax):
+    def __init__(self,
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 *,
+                 func_x2y: Callable,
+                 func_x2y_jax: Callable) -> None:
+        '''Store the numpy and jax scatter functions.'''
 
         super().__init__(xflow, yflow, func_x2y=func_x2y)
 
         self.func_x2y_jax = func_x2y_jax
 
-    def fit(self,
-            x_obs,
-            y_obs,
-            params_0,
+    def fit(  # noqa: PLR0913 — observed pair, init params, and the optimizer control panel
+            self,
+            x_obs: ArrayLike,
+            y_obs: ArrayLike,
+            params_0: ArrayLike,
             *,
-            N=1000,
-            lr=1e-2,
-            n_step=10000,
-            atol=1e-4,
-            rtol=1e-4,
-            check_per_step=100,
-            seed=0,
-            optimizer=None,
-            verbose=False,
-            x_range=None,
-            x_err_range=None,
-            y_range=None,
-            y_err_range=None):
+            N: int = 1000,
+            lr: float = 1e-2,
+            n_step: int = 10000,
+            atol: float = 1e-4,
+            rtol: float = 1e-4,
+            check_per_step: int = 100,
+            seed: int = 0,
+            optimizer: optax.GradientTransformation | None = None,
+            verbose: bool = False,
+            x_range: tuple[float, float] | None = None,
+            x_err_range: tuple[float, float] | None = None,
+            y_range: tuple[float, float] | None = None,
+            y_err_range: tuple[float, float] | None = None,
+            ) -> tuple[np.ndarray, np.ndarray]:
         """
         Fit model parameters by gradient descent on the energy distance.
 
@@ -1379,19 +1491,20 @@ class RegressorEnergyPT(RegressorKS):
         Zoom-in grid regeneration scheme. Default is 'mean_std'.
     """
 
-    def __init__(self,
-                 xflow,
-                 yflow,
-                 func_x2y,
+    def __init__(self,  # noqa: PLR0913 — RegressorKS's bundle plus the energy compare controls
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 func_x2y: Callable,
                  *,
-                 parser,
-                 print_mean_std,
-                 func_x2y_jax=None,
-                 permutations=200,
-                 chunk_size=None,
-                 chunk_iter=None,
-                 backend='numpy',
-                 gen_new_grid='mean_std'):
+                 parser: Callable,
+                 print_mean_std: Callable,
+                 func_x2y_jax: Callable | None = None,
+                 permutations: int = 200,
+                 chunk_size: int | None = None,
+                 chunk_iter: int | None = None,
+                 backend: str = 'numpy',
+                 gen_new_grid: str | Callable = 'mean_std') -> None:
+        '''See the class docstring for the parameter meanings.'''
 
         if backend not in ('numpy', 'jax'):
             raise ValueError(f"backend must be 'numpy' or 'jax', not {backend}")
@@ -1426,13 +1539,15 @@ class LogLinearEnergyPT(_PositiveSigmaGridMixin, RegressorEnergyPT):
     """
 
     def __init__(self,
-                 xflow,
-                 yflow,
-                 permutations=200,
-                 chunk_size=None,
-                 chunk_iter=None,
-                 backend='numpy',
-                 gen_new_grid='mean_std'):
+                 xflow: FlowVI,
+                 yflow: FlowVI,
+                 *,
+                 permutations: int = 200,
+                 chunk_size: int | None = None,
+                 chunk_iter: int | None = None,
+                 backend: str = 'numpy',
+                 gen_new_grid: str | Callable = 'mean_std') -> None:
+        '''Assembles the loglinear scatter pair with the energy strategy.'''
 
         super().__init__(xflow,
                          yflow,
@@ -1454,7 +1569,8 @@ class LogLinearEnergyGrad(RegressorEnergyGrad):
     unit-normal draw; parameters are (k, b, sig).
     """
 
-    def __init__(self, xflow, yflow):
+    def __init__(self, xflow: FlowVI, yflow: FlowVI) -> None:
+        '''Assembles the loglinear scatter pair with the gradient strategy.'''
 
         super().__init__(xflow,
                          yflow,

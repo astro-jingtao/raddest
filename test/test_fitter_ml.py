@@ -162,7 +162,9 @@ class TestLogLinearMLFit:
             x_obs,
             x_err,
             y_obs,
-            y_err, [1.5, 0.0, 0.05], [2.5, 1.0, 0.2],
+            y_err,
+            l_bounds=[1.5, 0.0, 0.05],
+            u_bounds=[2.5, 1.0, 0.2],
             m=4)
         assert params_grid.shape == (16, 3)
         assert weight.shape == (16, )
@@ -336,7 +338,8 @@ class TestRegressorBaseBranches:
         x_obs, x_err, y_obs, y_err = obs_data
         with pytest.raises(ValueError, match='same length'):
             ml_regressor.get_posterior_qmc(x_obs, x_err, y_obs, y_err,
-                                           [1.5, 2.5], [0.0, 1.0, 2.0])
+                                           l_bounds=[1.5, 2.5],
+                                           u_bounds=[0.0, 1.0, 2.0])
 
 
 class TestRegressorKSInit:
