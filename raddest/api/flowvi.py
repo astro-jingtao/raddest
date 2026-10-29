@@ -1,11 +1,16 @@
+"""FlowVI: a pzflow normalizing flow for the joint (x, x_err) distribution,
+with an optional variable transform and the fit/sample/test interface."""
+
+from __future__ import annotations
+
 import os
 import shutil
-from typing import Union
 
 import jax.numpy as jnp
 import joblib
 from ndtest.ksnd import ks2d2s
 import numpy as np
+from numpy.typing import ArrayLike
 import optax
 from pzflow import Flow
 
@@ -14,17 +19,21 @@ from ..x_xerr import construct_nf_fit_func, construct_x_xerr_w, gen_xobs_trans, 
 
 
 class FlowVI:
+    """Normalizing flow of one axis' (x, x_err) joint distribution."""
 
     def __init__(self,
-                 flow: Union[Flow, None] = None,
-                 transfer: Union[Transfer, None] = None,
-                 transfer_params=None,
-                 x_min=-jnp.inf,
-                 x_max=jnp.inf,
-                 x_err_min=-jnp.inf,
-                 x_err_max=jnp.inf):
-        self.flow: Union[Flow, None] = flow
-        self.transfer: Union[Transfer, None] = transfer
+                 flow: Flow | None = None,
+                 transfer: Transfer | None = None,
+                 *,
+                 transfer_params: ArrayLike | None = None,
+                 x_min: float = -jnp.inf,
+                 x_max: float = jnp.inf,
+                 x_err_min: float = -jnp.inf,
+                 x_err_max: float = jnp.inf) -> None:
+        """Bind the flow and transform; validate transfer_params against the
+        transfer's parameter count."""
+        self.flow: Flow | None = flow
+        self.transfer: Transfer | None = transfer
 
         # sourcery skip: merge-else-if-into-elif
         if self.transfer is None:  # transfer not used
@@ -56,7 +65,8 @@ class FlowVI:
         self.loss = None
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path: str) -> FlowVI:
+        '''Rebuild a saved FlowVI from its folder (flow + transfer dumps).'''
         att = joblib.load(os.path.join(path, 'attribute'))
         if att['flow']:
             flow = Flow(file=os.path.join(path, 'flow'))
@@ -79,31 +89,33 @@ class FlowVI:
 
         return new_cls
 
-    def fit(self,
-            x_obs,
-            x_err,
-            optimizer=None,
-            n_pre=100,
-            n_train=500,
-            n_node=21,
-            int_method='ghq',
-            x_min=None,
-            x_max=None,
-            x_err_min=None,
-            x_err_max=None,
-            guess_method='gg',
-            guess_recalibrate=None,
-            guess_verbose=False,
-            derive_uv_bounds=False,
-            skip_fitting_if_init_good=False,
-            init_good_threshold=0.05,
-            init_check_N=10000,
-            check_per_step=10,
-            early_stop=True,
-            max_stuck=5,
-            stuck_frac=0.05,
-            re_estimate_transer_params=False,
-            verbose=False):
+    def fit(  # noqa: PLR0913 — the observation pair plus the full nf_fit_general control panel
+            self,
+            x_obs: ArrayLike,
+            x_err: ArrayLike,
+            *,
+            optimizer: optax.GradientTransformation | None = None,
+            n_pre: int = 100,
+            n_train: int = 500,
+            n_node: int = 21,
+            int_method: str = 'ghq',
+            x_min: float | None = None,
+            x_max: float | None = None,
+            x_err_min: float | None = None,
+            x_err_max: float | None = None,
+            guess_method: str = 'gg',
+            guess_recalibrate: bool | None = None,
+            guess_verbose: bool = False,
+            derive_uv_bounds: bool = False,
+            skip_fitting_if_init_good: bool = False,
+            init_good_threshold: float = 0.05,
+            init_check_N: int = 10000,
+            check_per_step: int = 10,
+            early_stop: bool = True,
+            max_stuck: int = 5,
+            stuck_frac: float = 0.05,
+            re_estimate_transer_params: bool = False,
+            verbose: bool = False) -> None:
         """
         Fit the normalizing flow model of data and uncertainty joint distribution (x, x_err),
         by maximizing the likelihood of observed data and uncertainty joint distribution (x_obs, x_err).
@@ -230,17 +242,20 @@ class FlowVI:
 
         self.fitted = True
 
-    def check_fit(self):
+    def check_fit(self) -> None:
+        '''Raise ValueError when the flow has not been fitted yet.'''
         if not self.fitted:
             raise ValueError("Model not fitted yet.")
 
     def sample(self,
-               N,
-               x_min=None,
-               x_max=None,
-               x_err_min=None,
-               x_err_max=None,
-               return_numpy=False):
+               N: int,
+               *,
+               x_min: float | None = None,
+               x_max: float | None = None,
+               x_err_min: float | None = None,
+               x_err_max: float | None = None,
+               return_numpy: bool = False) -> tuple[jnp.ndarray, jnp.ndarray,
+                                                  jnp.ndarray]:
         '''
         
         return:
@@ -270,7 +285,13 @@ class FlowVI:
                               transfer_params=self.transfer_params,
                               return_numpy=return_numpy)
 
-    def log_likelihood(self, x_obs, x_err, n_node=21, qmc=False):
+    def log_likelihood(self,
+                       x_obs: ArrayLike,
+                       x_err: ArrayLike,
+                       n_node: int = 21,
+                       qmc: bool = False) -> jnp.ndarray:
+        '''Weighted-flow log-likelihood of the observed pair on the
+        integration grid (ghq or qmc).'''
 
         self.check_fit()
 
@@ -291,16 +312,19 @@ class FlowVI:
         return log_likelihood([self.flow._params[0], self.flow._params[1]],
                               u_ext, v_ext, w)
 
-    def ks_test(self,
-                x_obs,
-                x_err,
-                N=10000,
-                M=None,
-                K=1,
-                x_min=None,
-                x_max=None,
-                x_err_min=None,
-                x_err_max=None):
+    def ks_test(  # noqa: PLR0913 — observed pair plus the three test controls and four generation ranges
+                self,
+                x_obs: ArrayLike,
+                x_err: ArrayLike,
+                *,
+                N: int = 10000,
+                M: int | None = None,
+                K: int = 1,
+                x_min: float | None = None,
+                x_max: float | None = None,
+                x_err_min: float | None = None,
+                x_err_max: float | None = None,
+                ) -> tuple[float, float] | tuple[list[float], list[float]]:
         """
         Perform 2D-KS test.
 
@@ -367,7 +391,9 @@ class FlowVI:
 
         return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
 
-    def save(self, folder, force=False):
+    def save(self, folder: str, force: bool = False) -> None:
+        '''Dump the flow, transfer, and attributes into a folder; force
+        overwrites a non-empty target.'''
 
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -412,5 +438,6 @@ class FlowVI:
         joblib.dump(save_dict, os.path.join(folder, 'attribute'))
 
 
-def get_params_len(params):
+def get_params_len(params: ArrayLike | float) -> int:
+    '''Number of transfer parameters: 1 for a scalar, len otherwise.'''
     return 1 if isinstance(params, (int, float)) else len(params)

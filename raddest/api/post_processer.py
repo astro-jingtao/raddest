@@ -1,13 +1,28 @@
+"""Post-processing of fitted FlowVI models: distribution-matching x shifts
+chosen between candidate methods by the 2D KS test."""
+
+from __future__ import annotations
+
 from copy import deepcopy
 
 from ndtest.ksnd import ks2d2s
 import numpy as np
+from numpy.typing import ArrayLike
 
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import XShift, combine_transfers
 
 
-def post_shift(x_obs, x_err, flow_vi: FlowVI, N=10000, shift_method='median'):
+def post_shift(x_obs: ArrayLike,
+               x_err: ArrayLike,
+               flow_vi: FlowVI,
+               N: int = 10000,
+               shift_method: str = 'median') -> FlowVI:
+    """Apply the best KS-improving x shift transform to a copy of flow_vi.
+
+    Returns the shifted copy when its KS p-value beats the original's,
+    otherwise the original.
+    """
 
     flow_vi_old = flow_vi
     _, x_err_gen_old, x_obs_gen_old = flow_vi_old.sample(N)
@@ -27,7 +42,11 @@ def post_shift(x_obs, x_err, flow_vi: FlowVI, N=10000, shift_method='median'):
     return flow_vi if p_old < p_new else flow_vi_old
 
 
-def get_shift(x_obs, x_obs_gen, method='median'):
+def get_shift(x_obs: ArrayLike,
+              x_obs_gen: ArrayLike,
+              method: str = 'median') -> float:
+    """Shift between observed and generated x: 'median', 'mean', or the
+    'histogram' peak difference."""
 
     if method == 'median':
         return np.median(x_obs_gen) - np.median(x_obs)

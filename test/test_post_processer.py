@@ -51,14 +51,14 @@ class TestPostShift:
                     max_stuck=5,
                     stuck_frac=0.01)
 
-        _, p_old = flow_vi.ks_test(x_obs_shift, x_err, 10000)
+        _, p_old = flow_vi.ks_test(x_obs_shift, x_err, N=10000)
 
         flow_vi_new = post_shift(x_obs_shift,
                                  x_err,
                                  flow_vi,
                                  shift_method='median')
 
-        _, p_new = flow_vi_new.ks_test(x_obs_shift, x_err, 10000)
+        _, p_new = flow_vi_new.ks_test(x_obs_shift, x_err, N=10000)
 
         assert p_new > p_old
 
