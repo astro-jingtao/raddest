@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from raddest.api.flowvi import FlowVI
-from raddest.api.post_processer import get_shift
+from raddest.api.post_processor import get_shift
 from raddest.api.utils import to_each_piece_params, to_each_piece_params_studentT
 from raddest.transfer import NegLogPlus, XShiftNegLogPlus
 from raddest.x_xerr import construct_x_xerr_w

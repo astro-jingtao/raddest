@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from raddest.api.flowvi import FlowVI
-from raddest.api.post_processer import post_shift
+from raddest.api.post_processor import post_shift
 from raddest.transfer import NegLogPlus
 
 pytestmark = pytest.mark.slow
