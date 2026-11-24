@@ -2,6 +2,10 @@
 
 ## [unreleased]
 
+### Added
+
+- Cross-backend parity tests for the jax and numpy engines: same-data statistic/p-value agreement of `energy_test` vs `energy_test_jax` (identical samples, fully shifted samples, same-distribution p-values within Monte-Carlo noise, asymmetric sample splits), the numpy grid compare vs the jax grid compare on identical inputs (the jax statistic must fall inside the numpy noise-realization band), and a `LogLinearEnergyPT` fit through both backends on shared flows and data (grid points identical, stat columns correlated > 0.995, `params_mean`/`params_std` agreeing within calibrated tolerances).
+
 ### Changed
 
 - Lint no longer selects PLR0913 (too-many-arguments): estimator and training interfaces in this repo legitimately carry one slot per physical knob, so the rule only produced blanket waivers; the 27 `# noqa: PLR0913` comments (and their reason blocks) are removed and `ruff.toml` drops the rule and its `max-args` setting.

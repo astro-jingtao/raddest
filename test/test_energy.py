@@ -246,6 +246,117 @@ class TestEnergyTestJax:
             energy_test_jax(np.zeros((10, 2)), np.zeros((10, 3)))
 
 
+class TestJaxNumpyBackendParity:
+    """Same data through the numpy and jax permutation engines must agree.
+
+    The observed statistic is deterministic and must match to float32
+    accuracy; the p-values are Monte-Carlo estimates over independent
+    permutation streams, so they agree only up to each stream's binomial
+    noise (std <= 0.5 / sqrt(permutations)).
+    """
+
+    def test_identical_samples_zero_statistic_and_unit_p(self):
+        x, _ = make_samples(n_x=120, n_y=120)
+        stat_np, p_np = energy_test(x, x, permutations=50, rng=np.random.default_rng(0))
+        stat_jax, p_jax = energy_test_jax(x, x, permutations=50)
+        assert stat_np == pytest.approx(0.0, abs=1e-12)
+        assert stat_jax == pytest.approx(0.0, abs=1e-4)
+        assert p_np == pytest.approx(1.0)
+        assert p_jax == pytest.approx(1.0)
+
+    def test_shifted_samples_minimal_p_on_both(self):
+        x, y = make_samples(n_x=300, n_y=300, shift=1.0)
+        stat_np, p_np = energy_test(x, y, permutations=200, rng=np.random.default_rng(0))
+        stat_jax, p_jax = energy_test_jax(x, y, permutations=200)
+        assert p_np == pytest.approx(1.0 / 201)
+        assert p_jax == pytest.approx(1.0 / 201)
+        assert stat_jax == pytest.approx(stat_np, rel=RTOL_JAX, abs=1e-4)
+
+    def test_same_distribution_pvalues_within_monte_carlo_noise(self):
+        # Each engine estimates the same true p with binomial std
+        # sqrt(p(1-p)/B) <= 0.5/sqrt(200) ~ 0.035, so |dp| > 0.25 is a
+        # >5-sigma event for two independent streams.
+        x, y = make_samples(n_x=300, n_y=300)
+        _, p_np = energy_test(x, y, permutations=200, rng=np.random.default_rng(0))
+        _, p_jax = energy_test_jax(x, y, permutations=200, seed=1)
+        assert abs(p_np - p_jax) < 0.25
+
+    @pytest.mark.parametrize(("n_x", "n_y"), [(37, 53), (53, 37)])
+    def test_statistic_matches_numpy_unequal_sizes(self, n_x, n_y):
+        # asymmetric splits exercise the mask quadratic form at nx != n/2
+        x, y = make_samples(n_x=n_x, n_y=n_y, shift=0.3)
+        stat_np, _ = energy_test(x, y, permutations=20, rng=np.random.default_rng(0))
+        stat_jax, _ = energy_test_jax(x, y, permutations=20)
+        assert stat_jax == pytest.approx(stat_np, rel=RTOL_JAX, abs=1e-4)
+
+
+def make_energy_grid_inputs(
+    n=200, seed=13
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    x_gen = rng.uniform(1, 10, size=n)
+    x_obs_gen = x_gen + rng.normal(scale=0.1, size=n)
+    y_kdt = np.linspace(5, 50, 400)
+    y_err_kdt = np.full(400, 0.5)
+    x_obs = rng.uniform(1, 10, size=n)
+    y_obs = 3 * x_obs + 1 + rng.normal(scale=0.6, size=n)
+    return x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs
+
+
+class TestGridBackendParity:
+    """The numpy grid compare and the jax grid compare on identical inputs.
+
+    The numpy backend draws fresh generator noise per call; the jax backend
+    fixes one noise realization at construction and shares it across the
+    grid. Their statistics therefore agree only up to the noise-realization
+    spread, which this test measures on the numpy side itself and checks
+    the jax statistic falls inside (calibrated: z = -0.7 and -0.3 for the
+    good and bad parameter points).
+    """
+
+    N_NOISE_DRAWS = 12
+    Z_TOL = 5.0
+
+    def _compares(self, permutations: int) -> tuple:
+        x_gen, x_obs_gen, y_kdt, y_err_kdt, x_obs, y_obs = make_energy_grid_inputs()
+        gen_cond = construct_generator_cond(lambda x, params: params[0] * x + params[1])
+        compare_np = construct_energy_compare(
+            gen_cond,
+            x_gen,
+            x_obs_gen,
+            y_kdt,
+            y_err_kdt,
+            x_obs=x_obs,
+            y_obs=y_obs,
+            permutations=permutations,
+        )
+        compare_jax = construct_energy_compare_jax(
+            lambda x, params, eps: params[0] * x + params[1],
+            x_obs,
+            y_obs,
+            x_gen,
+            x_obs_gen,
+            y_kdt=y_kdt,
+            y_err_kdt=y_err_kdt,
+            permutations=permutations,
+            seed=0,
+        )
+        return compare_np, compare_jax
+
+    @pytest.mark.parametrize("params", [(3.0, 1.0), (5.0, 1.0)])
+    def test_jax_statistic_within_numpy_noise_band(self, params):
+        compare_np, compare_jax = self._compares(permutations=200)
+        stats_np = []
+        for seed in range(self.N_NOISE_DRAWS):
+            np.random.seed(seed)
+            stats_np.append(compare_np(*params)[0])
+        stats_np = np.asarray(stats_np)
+        mu, sd = stats_np.mean(), stats_np.std()
+        assert sd > 0  # the noise band is measurable, not degenerate
+        stat_jax = float(compare_jax(np.asarray([params]))[0, 0])
+        assert stat_jax == pytest.approx(mu, abs=self.Z_TOL * sd)
+
+
 class TestConstructEnergyCompareJax:
     """The batch grid compare closure (jax grid backend)."""
 
