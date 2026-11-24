@@ -1003,7 +1003,7 @@ class LinearML(RegressorML):
         )
 
 
-class RegressorKS(RegressorBase):
+class RegressorGrid(RegressorBase):
     """Grid-search regressor comparing synthetic and observed distributions.
 
     The comparison statistic used to weight the grid is decided by
@@ -1011,11 +1011,11 @@ class RegressorKS(RegressorBase):
     ``compare_constructor(generator_cond, x_gen, x_obs_gen, y_kdt, y_err_kdt,
     x_obs=..., y_obs=...)`` and must return ``compare(*params) -> (stat,
     p_value)``.
-    Subclasses replace it to fit against a different distribution distance
-    (e.g. the energy test); the default is the 2D two-sample KS test.
+    The base class binds none; statistic subclasses bind their own (the KS
+    layer below, the permutation energy test, ...).
     """
 
-    compare_constructor = staticmethod(construct_ks_compare)
+    compare_constructor: Callable | None = None
 
     # Grid evaluation backend: 'numpy' runs one joblib worker per grid point
     # (the compare closure must then stay jax-free, or every worker process
@@ -1096,7 +1096,7 @@ class RegressorKS(RegressorBase):
         This method performs a grid search over the specified parameter space to fit
         the model to observed ``(x_obs, y_obs)`` data. It generates synthetic data
         using the configured flows and parameters, compares the synthetic and observed
-        distributions via a KS-based metric, and iteratively zooms into regions of
+        distributions via the bound two-sample compare statistic, and iteratively zooms into regions of
         low distribution difference. An optional refinement step performs a final dense
         grid search around the best-fit region obtained from the zoom-in procedure.
 
@@ -1149,9 +1149,14 @@ class RegressorKS(RegressorBase):
             Weighted standard deviation of the fitted parameters.
         res_arr : ndarray
             Array containing the grid search results. Each row corresponds to one
-            grid point, with parameter values and their associated KS statistic and p-value.
+            grid point, with parameter values and their associated test statistic and p-value.
         """
 
+        if self.compare_constructor is None:
+            raise ValueError(
+                f"{type(self).__name__} binds no compare_constructor; a "
+                "two-sample statistic is required to weight the grid."
+            )
         if self.backend == "jax":
             if self.compare_batch_constructor is None:
                 raise ValueError(
@@ -1251,6 +1256,18 @@ class RegressorKS(RegressorBase):
         )
 
         return params_mean, params_std, res_arr
+
+
+class RegressorKS(RegressorGrid):
+    """Grid regressor weighting the zoom-in grid by the 2D two-sample KS test.
+
+    The KS binding of the grid machinery: ``compare_constructor`` is
+    :func:`raddest.reg.constructor.construct_ks_compare`, which scores each
+    grid point's synthetic 2D sample against the observed one with
+    ``ndtest.ksnd.ks2d2s``.
+    """
+
+    compare_constructor = staticmethod(construct_ks_compare)
 
 
 class _PositiveSigmaGridMixin:
@@ -1459,10 +1476,10 @@ class RegressorEnergyGrad(RegressorBase):
         return np.asarray(params), np.array(loss_history)
 
 
-class RegressorEnergyPT(RegressorKS):
+class RegressorEnergyPT(RegressorGrid):
     """Grid-search regressor weighting the grid by energy-test p-values.
 
-    The energy-test counterpart of `RegressorKS`: same zoom-in grid
+    The energy-test counterpart of the KS grid regressors: same zoom-in grid
     machinery, with the 2D two-sample KS compare replaced by the permutation
     energy test. At each grid point a synthetic sample is generated and its
     energy distance to the observed sample is converted to a p-value, which
@@ -1482,7 +1499,7 @@ class RegressorEnergyPT(RegressorKS):
     func_x2y : callable
         Numpy scatter function converting latent x to y.
     parser, print_mean_std : callable
-        Grid-result parser and progress printer, as in `RegressorKS`.
+        Grid-result parser and progress printer, as in `RegressorGrid`.
     func_x2y_jax : callable or None, optional
         Differentiable scatter function; required by the jax backend.
         Default is None.

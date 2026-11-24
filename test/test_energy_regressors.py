@@ -9,7 +9,7 @@ from raddest.api.fitter import (
     LogLinearKS,
     RegressorEnergyGrad,
     RegressorEnergyPT,
-    RegressorKS,
+    RegressorGrid,
 )
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
@@ -150,7 +150,7 @@ class TestEnergyPTHierarchy:
         # no flows needed: the class hierarchy is inspectable without fitting
         regressor_pt = LogLinearEnergyPT(None, None)
         assert isinstance(regressor_pt, RegressorEnergyPT)
-        assert isinstance(regressor_pt, RegressorKS)
+        assert isinstance(regressor_pt, RegressorGrid)
         assert not isinstance(regressor_pt, LogLinearKS)
 
     def test_sigma_grid_defaults_shared_with_ks_models(self):

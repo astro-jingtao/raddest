@@ -12,9 +12,12 @@ from raddest.api.fitter import (
     PiecewiseLogLinearML,
     PiecewiseLogLinearStudentTML,
     RegressorBase,
+    RegressorEnergyPT,
+    RegressorGrid,
     RegressorKS,
     SaturatedLogLinearML,
 )
+from raddest.reg.constructor import construct_ks_compare
 
 TRUE_PARAMS = {"k": 2.0, "b": 0.5, "sig": 0.1}
 
@@ -267,7 +270,7 @@ class TestLogLinearKSFit:
     def test_unknown_gen_new_grid_rejected(self, tiny_flows):
         xflow, yflow = tiny_flows
         with pytest.raises(ValueError, match="Unknown gen_new_grid"):
-            RegressorKS(
+            RegressorGrid(
                 xflow,
                 yflow,
                 lambda x, p: x,
@@ -300,15 +303,17 @@ class TestRegressorBaseBranches:
             )
 
 
-class TestRegressorKSInit:
+class TestRegressorGridInit:
     def test_func_none_raises(self, tiny_flows):
         xflow, yflow = tiny_flows
         with pytest.raises(ValueError, match="No function"):
-            RegressorKS(xflow, yflow, None, parser=lambda r, i: r, print_mean_std=lambda a, b: None)
+            RegressorGrid(
+                xflow, yflow, None, parser=lambda r, i: r, print_mean_std=lambda a, b: None
+            )
 
     def test_quantile_gen_new_grid(self, tiny_flows, obs_data):
         xflow, yflow = tiny_flows
-        regressor = RegressorKS(
+        regressor = RegressorGrid(
             xflow,
             yflow,
             lambda x, params: params[0] * x + params[1],
@@ -340,7 +345,7 @@ class TestRegressorKSInit:
             return [np.linspace(0, 1, 3) for _ in range(n_par)]
 
         xflow, yflow = tiny_flows
-        regressor = RegressorKS(
+        regressor = RegressorGrid(
             xflow,
             yflow,
             lambda x, params: params[0] * x + params[1],
@@ -439,3 +444,35 @@ class TestEnergyGradVerbose:
         assert "converged" in capsys.readouterr().out
         assert params_hat.shape == (3,)
         assert len(loss_history) >= 2
+
+
+class TestRegressorGridLayering:
+    """The grid machinery is statistic-agnostic; KS is one binding of it."""
+
+    def test_base_binds_no_compare_and_fit_raises(self, tiny_flows):
+        xflow, yflow = tiny_flows
+        regressor = RegressorGrid(
+            xflow,
+            yflow,
+            lambda x, params: params[0] * x + params[1],
+            parser=lambda res, iargs: res,
+            print_mean_std=lambda a, b: None,
+        )
+        assert regressor.compare_constructor is None
+        with pytest.raises(ValueError, match="binds no compare_constructor"):
+            regressor.fit(None, None, params_list=[[1.0]], N=10)
+
+    def test_ks_layer_binds_the_ks_compare(self, tiny_flows):
+        xflow, yflow = tiny_flows
+        regressor = RegressorKS(
+            xflow,
+            yflow,
+            lambda x, params: params[0] * x + params[1],
+            parser=lambda res, iargs: res,
+            print_mean_std=lambda a, b: None,
+        )
+        assert regressor.compare_constructor is construct_ks_compare
+
+    def test_energy_regressor_is_grid_not_ks(self):
+        assert issubclass(RegressorEnergyPT, RegressorGrid)
+        assert not issubclass(RegressorEnergyPT, RegressorKS)
