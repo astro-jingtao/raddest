@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from raddest.GaussHermiteQuadrature import GaussHermiteQuadrature
+from raddest.gauss_hermite_quadrature import GaussHermiteQuadrature
 from raddest.interpolator import MyPchipInterpolator
 from raddest.reg.func import (
     generate_piecewise_linear,
