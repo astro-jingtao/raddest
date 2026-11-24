@@ -33,7 +33,7 @@ Now. `raddest` should be ready to use.
 
 ## Usage
 
-See the notebook in the `examples` folder for an example usage of `raddest`.
+See the notebook in the `examples` folder for an example usage of `raddest`. The regressor classes and how the fit-strategy and model-family axes compose are diagrammed in [`docs/regressors.md`](docs/regressors.md).
 
 You need `corner` to run these examples. If you don't have, install it by
 ```bash
