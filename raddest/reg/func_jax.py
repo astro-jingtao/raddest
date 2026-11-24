@@ -63,7 +63,7 @@ def loglinear_scatter_jax(
     params: jax.Array,
     eps: ArrayLike,
 ) -> jax.Array:
-    """Jax twin of ``raddest.reg.ks.loglinear_scatter`` with the intrinsic
+    """Jax twin of ``raddest.reg.scatter.loglinear_scatter`` with the intrinsic
     scatter injected as a fixed unit-normal draw ``eps`` (reparameterization).
 
     ``params = (k, b, sig)``:

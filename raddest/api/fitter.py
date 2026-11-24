@@ -52,7 +52,8 @@ from raddest.reg.func_jax import (
     loglinear_scatter_jax,
     saturated_linear_smooth_jax,
 )
-from raddest.reg.ks import (
+from raddest.reg.map import get_w_add_lognorm, get_xyw_trans
+from raddest.reg.scatter import (
     gen_xy_obs_prepare,
     linear_scatter,
     loglinear_scatter,
@@ -60,7 +61,6 @@ from raddest.reg.ks import (
     parser_anylinear,
     print_mean_std_loglinear,
 )
-from raddest.reg.map import get_w_add_lognorm, get_xyw_trans
 
 if TYPE_CHECKING:
     from raddest.api.flowvi import FlowVI

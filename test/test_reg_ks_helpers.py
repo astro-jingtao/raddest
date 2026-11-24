@@ -3,9 +3,11 @@ import numpy as np
 from raddest.api.flowvi import FlowVI
 from raddest.reg.ks import (
     compare_loglinear,
+    get_ks_reg_loglinear,
+)
+from raddest.reg.scatter import (
     gen_xy_obs_loglinear,
     gen_xy_obs_loglinear_neglogplus,
-    get_ks_reg_loglinear,
     linear_scatter,
     loglinear_scatter,
     loglinear_scatter_student_t,
