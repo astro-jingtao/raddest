@@ -14,8 +14,8 @@ from numpy.typing import ArrayLike
 import optax
 from pzflow import Flow
 
-from ..transfer import Transfer
-from ..x_xerr import construct_nf_fit_func, construct_x_xerr_w, gen_xobs_trans, nf_fit_general
+from raddest.transfer import Transfer
+from raddest.x_xerr import construct_nf_fit_func, construct_x_xerr_w, gen_xobs_trans, nf_fit_general
 
 
 class FlowVI:

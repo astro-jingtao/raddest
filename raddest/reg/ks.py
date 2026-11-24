@@ -11,9 +11,9 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.stats import t as student_t
 
-from ..transfer import NegLogPlus, Transfer
-from ..x_xerr import gen_xobs_trans
-from .constructor import construct_generator_cond
+from raddest.reg.constructor import construct_generator_cond
+from raddest.transfer import NegLogPlus, Transfer
+from raddest.x_xerr import gen_xobs_trans
 
 if TYPE_CHECKING:
     from pzflow import Flow

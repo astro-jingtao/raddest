@@ -11,7 +11,7 @@ from jax.scipy.stats import gaussian_kde
 import numpy as np
 from numpy.typing import ArrayLike
 
-from ..tools import (
+from raddest.tools import (
     concat,
     get_ext_w_2d,
     get_ext_w_2d_grid,
@@ -20,7 +20,7 @@ from ..tools import (
     get_ext_w_2d_qmc,
     get_p_flow,
 )
-from ..transfer import Transfer
+from raddest.transfer import Transfer
 
 if TYPE_CHECKING:
     from pzflow import Flow

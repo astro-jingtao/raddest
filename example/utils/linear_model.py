@@ -10,7 +10,7 @@ from numpy.typing import ArrayLike
 from scipy.odr import ODR, Data, Model
 import statsmodels.api as sm
 
-from .tools import all_asarray, remove_bad
+from utils.tools import all_asarray, remove_bad
 
 
 def get_linear_model(k: float, b: float) -> Callable:

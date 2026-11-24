@@ -6,9 +6,9 @@
 # (each reported when made):
 #   * target-version py39 = floor of setup.py python_requires (>=3.9).
 #   * src = ["."] — flat layout (package `raddest/` at repo root).
-#   * TID252 (ban relative imports) NOT selected: the package has an
-#     established widespread relative-import policy (e.g. `from ..transfer
-#     import ...`); new modules converge to absolute imports by convention.
+#   * TID252 (ban relative imports) selected: the whole repo (package,
+#     example helpers, tests) now imports absolutely (`from raddest.x
+#     import ...`); the rule keeps it that way.
 #   * extend-exclude adds this repo's build/artifact/scratch trees.
 #   * test files set CUDA/JAX env vars before imports on purpose -> E402
 #     ignored under test/.
@@ -56,6 +56,10 @@ select = [
 
     # isort: group and sort standard-library, third-party, and first-party imports.
     "I",
+
+    # flake8-tidy-imports: TID252 bans relative imports — the repo converged
+    # to absolute imports (`from raddest.x import ...`) repo-wide.
+    "TID252",
 
     # pyupgrade: version-aware modernization based on target-version.
     "UP",

@@ -20,9 +20,9 @@ import pandas as pd
 from pzflow import Flow
 from pzflow.bijectors import Chain, RollingSplineCoupling, ShiftBounds
 
-from .shrink import shrink_data
-from .tools import get_ext_w, get_ext_w_inter_grid, get_ext_w_qmc, transform_data
-from .transfer import LogRotation, NegLogPlus, NegLogPlusXShift, Transfer, XShiftNegLogPlus
+from raddest.shrink import shrink_data
+from raddest.tools import get_ext_w, get_ext_w_inter_grid, get_ext_w_qmc, transform_data
+from raddest.transfer import LogRotation, NegLogPlus, NegLogPlusXShift, Transfer, XShiftNegLogPlus
 
 
 def nf_fit_frame(

@@ -15,8 +15,8 @@ from numpy.polynomial.hermite import hermgauss
 from numpy.typing import ArrayLike
 from scipy.stats.qmc import MultivariateNormalQMC
 
-from .GaussHermiteQuadrature import GaussHermiteQuadrature
-from .transfer import Transfer
+from raddest.GaussHermiteQuadrature import GaussHermiteQuadrature
+from raddest.transfer import Transfer
 
 if TYPE_CHECKING:
     from pzflow import Flow

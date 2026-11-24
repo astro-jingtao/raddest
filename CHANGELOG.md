@@ -5,6 +5,7 @@
 ### Changed
 
 - Lint no longer selects PLR0913 (too-many-arguments): estimator and training interfaces in this repo legitimately carry one slot per physical knob, so the rule only produced blanket waivers; the 27 `# noqa: PLR0913` comments (and their reason blocks) are removed and `ruff.toml` drops the rule and its `max-args` setting.
+- All relative imports are converted to absolute (`from raddest.x import ...`, `from utils.tools import ...` in the example helpers, 13 sites) and TID252 (ban relative imports) is selected in `ruff.toml` to keep the repo absolute.
 
 - `example/utils` (notebook helpers) gains type annotations, docstrings, and package/module docstrings; `setup.py` a module docstring.
 - Package misc: module docstrings for `raddest`, `raddest.GaussHermiteQuadrature`, `raddest.interpolator`; type annotations and docstrings in `raddest.interpolator` (its known dead reference stays recorded in TODO.md) and the jit closures of `raddest.x_xerr`.
