@@ -15,20 +15,18 @@ from raddest.transfer import (
 
 
 class TestNegLogPlus:
-
     def test_consistency(self):
         neglogplus = NegLogPlus()
         x, x_err = 1, 1
         params = [1, 1]
-        x_loop, x_err_loop = neglogplus.inv(
-            *neglogplus.trans(x, x_err, params), params)
+        x_loop, x_err_loop = neglogplus.inv(*neglogplus.trans(x, x_err, params), params)
         assert x == x_loop
         assert x_err == x_err_loop
 
     def test_save_load(self):
         neglogplus = NegLogPlus()
-        neglogplus.save('test_neglogplus.pkl')
-        neglogplus_loaded = Transfer.load('test_neglogplus.pkl')
+        neglogplus.save("test_neglogplus.pkl")
+        neglogplus_loaded = Transfer.load("test_neglogplus.pkl")
 
         x, x_err = 1, 1
         params = [1, 1]
@@ -37,11 +35,10 @@ class TestNegLogPlus:
         assert u_ori == u_load
         assert v_ori == v_load
 
-        os.remove('test_neglogplus.pkl')
+        os.remove("test_neglogplus.pkl")
 
 
 class TestCombinedTransfer:
-
     def test_consistency(self):
         t1 = NegLogPlus()
         t2 = LogRotation()
@@ -84,8 +81,8 @@ class TestCombinedTransfer:
 
         combined = combine_transfers(t1, t2, t3)
 
-        combined.save('test_combined.pkl')
-        combined_loaded = Transfer.load('test_combined.pkl')
+        combined.save("test_combined.pkl")
+        combined_loaded = Transfer.load("test_combined.pkl")
 
         x, x_err = 1, 1
         params = [1, 1, 1, 1, 1]
@@ -94,11 +91,10 @@ class TestCombinedTransfer:
         assert u_ori == u_load
         assert v_ori == v_load
 
-        os.remove('test_combined.pkl')
+        os.remove("test_combined.pkl")
 
 
 class TestShiftTransfers:
-
     def test_xshift_roundtrip(self):
         t = XShift()
         params = [0.5]
@@ -150,7 +146,6 @@ class TestShiftTransfers:
 
 
 class TestCombineTransfersEdge:
-
     def test_none_cases(self):
         t = NegLogPlus()
         assert combine_transfers(t, None) is t
@@ -174,7 +169,7 @@ class TestCombineTransfersEdge:
         def _jac(x, x_err, params):
             return 1.0
 
-        t1 = Transfer(_id, _id, _jac, 0, name='NoEst1')
-        t2 = Transfer(_id, _id, _jac, 0, name='NoEst2')
+        t1 = Transfer(_id, _id, _jac, 0, name="NoEst1")
+        t2 = Transfer(_id, _id, _jac, 0, name="NoEst2")
         combined = combine_transfers(t1, t2)
         assert combined.params_estimator is None

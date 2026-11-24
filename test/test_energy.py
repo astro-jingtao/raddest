@@ -1,5 +1,3 @@
-
-
 import itertools
 
 import jax
@@ -48,40 +46,43 @@ class TestEnergyDistanceParity:
     def test_jax_matches_numpy(self):
         x, y = make_samples(shift=0.3)
         e_jax = float(
-            energy_distance_jax(jnp.asarray(x, dtype=jnp.float32),
-                                jnp.asarray(y, dtype=jnp.float32)))
-        assert e_jax == pytest.approx(energy_distance_numpy(x, y),
-                                      rel=RTOL_JAX,
-                                      abs=1e-4)
+            energy_distance_jax(
+                jnp.asarray(x, dtype=jnp.float32), jnp.asarray(y, dtype=jnp.float32)
+            )
+        )
+        assert e_jax == pytest.approx(energy_distance_numpy(x, y), rel=RTOL_JAX, abs=1e-4)
 
     def test_jax_matches_pted_same_distribution(self):
         x, y = make_samples()
         t, _, _ = pted_fn(x, y, permutations=10, return_all=True)
         e_jax = float(
-            energy_distance_jax(jnp.asarray(x, dtype=jnp.float32),
-                                jnp.asarray(y, dtype=jnp.float32)))
+            energy_distance_jax(
+                jnp.asarray(x, dtype=jnp.float32), jnp.asarray(y, dtype=jnp.float32)
+            )
+        )
         assert e_jax == pytest.approx(t, rel=RTOL_JAX, abs=1e-4)
 
     def test_zero_for_identical_samples(self):
         x = np.random.default_rng(1).normal(size=(50, 2))
-        e = float(energy_distance_jax(jnp.asarray(x, dtype=jnp.float32),
-                                      jnp.asarray(x, dtype=jnp.float32)))
+        e = float(
+            energy_distance_jax(
+                jnp.asarray(x, dtype=jnp.float32), jnp.asarray(x, dtype=jnp.float32)
+            )
+        )
         assert e == pytest.approx(0.0, abs=1e-4)
 
     def test_u_statistic_close_to_v_statistic(self):
         x, y = make_samples(shift=0.3)
         e_u = float(
-            _energy_distance_u_jax(jnp.asarray(x, dtype=jnp.float32),
-                                   jnp.asarray(y, dtype=jnp.float32)))
-        assert e_u == pytest.approx(energy_distance_numpy(x, y),
-                                    rel=5e-2,
-                                    abs=5e-2)
+            _energy_distance_u_jax(
+                jnp.asarray(x, dtype=jnp.float32), jnp.asarray(y, dtype=jnp.float32)
+            )
+        )
+        assert e_u == pytest.approx(energy_distance_numpy(x, y), rel=5e-2, abs=5e-2)
 
     def test_u_statistic_is_differentiable(self):
-        x = jnp.asarray(np.random.default_rng(2).normal(size=(30, 2)),
-                        dtype=jnp.float32)
-        y = 0.5 * x + jnp.asarray(
-            np.random.default_rng(3).normal(size=(30, 2)), dtype=jnp.float32)
+        x = jnp.asarray(np.random.default_rng(2).normal(size=(30, 2)), dtype=jnp.float32)
+        y = 0.5 * x + jnp.asarray(np.random.default_rng(3).normal(size=(30, 2)), dtype=jnp.float32)
 
         def shift_y(theta):
             return _energy_distance_u_jax(x, y + theta)
@@ -92,16 +93,14 @@ class TestEnergyDistanceParity:
 
 
 class TestEnergyDistanceErrors:
-
     def test_feature_shape_mismatch(self):
-        with pytest.raises(ValueError, match='feature shape'):
+        with pytest.raises(ValueError, match="feature shape"):
             energy_distance_jax(jnp.zeros((10, 2)), jnp.zeros((10, 3)))
-        with pytest.raises(ValueError, match='feature shape'):
+        with pytest.raises(ValueError, match="feature shape"):
             energy_distance_numpy(np.zeros((10, 2)), np.zeros((10, 3)))
 
 
 class TestEnergyTest:
-
     def test_same_distribution_gives_large_p(self):
         x, y = make_samples(n_x=300, n_y=300)
         _, p = energy_test(x, y, permutations=200, rng=np.random.default_rng(0))
@@ -125,11 +124,11 @@ class TestEnergyTest:
         assert p == pytest.approx(1.0 / 100)
 
     def test_input_validation(self):
-        with pytest.raises(ValueError, match='at least 2D'):
+        with pytest.raises(ValueError, match="at least 2D"):
             energy_test(np.zeros(10), np.zeros((10, 2)))
-        with pytest.raises(ValueError, match='feature shape'):
+        with pytest.raises(ValueError, match="feature shape"):
             energy_test(np.zeros((10, 2)), np.zeros((10, 3)))
-        with pytest.raises(ValueError, match='NaN or Inf'):
+        with pytest.raises(ValueError, match="NaN or Inf"):
             energy_test(np.full((10, 2), np.nan), np.zeros((10, 2)))
 
 
@@ -147,12 +146,9 @@ class TestEnergyTestChunked:
         # whole sample, so the estimate is exactly the full-sample statistic.
         x, y = make_samples(shift=0.3)
         stat_full, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(3))
-        stat_cover, _ = energy_test(x,
-                                    y,
-                                    permutations=5,
-                                    rng=np.random.default_rng(3),
-                                    chunk_size=500,
-                                    chunk_iter=1)
+        stat_cover, _ = energy_test(
+            x, y, permutations=5, rng=np.random.default_rng(3), chunk_size=500, chunk_iter=1
+        )
         # not bitwise: the pooled-matrix sum and the per-chunk sums add the
         # same distances in a different order
         assert stat_cover == pytest.approx(stat_full, rel=RTOL_NUMPY)
@@ -160,70 +156,58 @@ class TestEnergyTestChunked:
     def test_chunk_stat_close_to_full_statistic(self):
         x, y = make_samples(shift=0.3)
         stat_full, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(3))
-        stat_chunk, _ = energy_test(x,
-                                    y,
-                                    permutations=5,
-                                    rng=np.random.default_rng(3),
-                                    chunk_size=100,
-                                    chunk_iter=10)
+        stat_chunk, _ = energy_test(
+            x, y, permutations=5, rng=np.random.default_rng(3), chunk_size=100, chunk_iter=10
+        )
         assert stat_chunk == pytest.approx(stat_full, abs=self.ABS_CHUNK_VS_FULL)
 
     def test_chunk_matches_pted_chunk_algorithm(self):
         x, y = make_samples(shift=0.3)
-        stat_ours, _ = energy_test(x,
-                                   y,
-                                   permutations=5,
-                                   rng=np.random.default_rng(3),
-                                   chunk_size=100,
-                                   chunk_iter=10)
-        stat_pted, _ = pted_chunk_numpy(x,
-                                        y,
-                                        permutations=5,
-                                        chunk_size=100,
-                                        chunk_iter=10)
+        stat_ours, _ = energy_test(
+            x, y, permutations=5, rng=np.random.default_rng(3), chunk_size=100, chunk_iter=10
+        )
+        stat_pted, _ = pted_chunk_numpy(x, y, permutations=5, chunk_size=100, chunk_iter=10)
         # Both are Monte-Carlo estimates of the same expected chunk statistic
         # (bias included); the tolerance covers the two independent noise.
         assert stat_ours == pytest.approx(stat_pted, abs=self.ABS_CHUNK_VS_PTED)
 
     def test_chunk_retains_discriminating_power(self):
         x_same, y_same = make_samples(n_x=300, n_y=300)
-        _, p_same = energy_test(x_same,
-                                y_same,
-                                permutations=100,
-                                rng=np.random.default_rng(0),
-                                chunk_size=100,
-                                chunk_iter=10)
+        _, p_same = energy_test(
+            x_same,
+            y_same,
+            permutations=100,
+            rng=np.random.default_rng(0),
+            chunk_size=100,
+            chunk_iter=10,
+        )
         assert p_same > 0.05
         x_shift, y_shift = make_samples(n_x=300, n_y=300, shift=1.0)
-        _, p_shift = energy_test(x_shift,
-                                 y_shift,
-                                 permutations=100,
-                                 rng=np.random.default_rng(0),
-                                 chunk_size=100,
-                                 chunk_iter=10)
+        _, p_shift = energy_test(
+            x_shift,
+            y_shift,
+            permutations=100,
+            rng=np.random.default_rng(0),
+            chunk_size=100,
+            chunk_iter=10,
+        )
         assert p_shift < 0.05
 
     def test_chunk_deterministic_given_rng(self):
         x, y = make_samples(shift=0.3)
-        res1 = energy_test(x,
-                           y,
-                           permutations=10,
-                           rng=np.random.default_rng(11),
-                           chunk_size=50,
-                           chunk_iter=5)
-        res2 = energy_test(x,
-                           y,
-                           permutations=10,
-                           rng=np.random.default_rng(11),
-                           chunk_size=50,
-                           chunk_iter=5)
+        res1 = energy_test(
+            x, y, permutations=10, rng=np.random.default_rng(11), chunk_size=50, chunk_iter=5
+        )
+        res2 = energy_test(
+            x, y, permutations=10, rng=np.random.default_rng(11), chunk_size=50, chunk_iter=5
+        )
         assert res1 == res2
 
     def test_chunk_args_must_be_given_together(self):
         x, y = make_samples(shift=0.3)
-        with pytest.raises(ValueError, match='together'):
+        with pytest.raises(ValueError, match="together"):
             energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_size=50)
-        with pytest.raises(ValueError, match='together'):
+        with pytest.raises(ValueError, match="together"):
             energy_test(x, y, permutations=5, rng=np.random.default_rng(0), chunk_iter=5)
 
 
@@ -235,9 +219,7 @@ class TestEnergyTestJax:
         stat_np, _ = energy_test(x, y, permutations=5, rng=np.random.default_rng(0))
         stat_jax, _ = energy_test_jax(x, y, permutations=5)
         assert stat_jax == pytest.approx(stat_np, rel=RTOL_JAX, abs=1e-4)
-        assert stat_jax == pytest.approx(energy_distance_numpy(x, y),
-                                         rel=RTOL_JAX,
-                                         abs=1e-4)
+        assert stat_jax == pytest.approx(energy_distance_numpy(x, y), rel=RTOL_JAX, abs=1e-4)
 
     def test_same_distribution_gives_large_p(self):
         x, y = make_samples(n_x=300, n_y=300)
@@ -258,9 +240,9 @@ class TestEnergyTestJax:
         assert res_0[0] == pytest.approx(res_1[0], rel=RTOL_JAX, abs=1e-4)
 
     def test_input_validation(self):
-        with pytest.raises(ValueError, match='at least 2D'):
+        with pytest.raises(ValueError, match="at least 2D"):
             energy_test_jax(np.zeros(10), np.zeros((10, 2)))
-        with pytest.raises(ValueError, match='feature shape'):
+        with pytest.raises(ValueError, match="feature shape"):
             energy_test_jax(np.zeros((10, 2)), np.zeros((10, 3)))
 
 
@@ -268,9 +250,9 @@ class TestConstructEnergyCompareJax:
     """The batch grid compare closure (jax grid backend)."""
 
     @staticmethod
-    def _make_inputs(n=200, seed=13) -> tuple[np.ndarray, np.ndarray,
-                                              np.ndarray, np.ndarray,
-                                              np.ndarray, np.ndarray]:
+    def _make_inputs(
+        n=200, seed=13
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         rng = np.random.default_rng(seed)
         x_gen = rng.uniform(1, 10, size=n)
         x_obs_gen = x_gen + rng.normal(scale=0.1, size=n)
@@ -297,8 +279,9 @@ class TestConstructEnergyCompareJax:
             x_obs_gen,
             y_kdt=y_kdt,
             y_err_kdt=y_err_kdt,
-                                               permutations=50,
-                                               seed=seed)
+            permutations=50,
+            seed=seed,
+        )
         params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
         res = compare(params)
         assert res.shape == (2, 2)
@@ -309,8 +292,7 @@ class TestConstructEnergyCompareJax:
         for i, p in enumerate(params):
             y_pred = p[0] * x_gen + p[1] + p[2] * eps_scatter
             y_pred = np.clip(y_pred, y_kdt.min(), y_kdt.max())
-            y_err_matched = y_err_kdt[np.argmin(np.abs(y_kdt[:, None] - y_pred[None, :]),
-                                                axis=0)]
+            y_err_matched = y_err_kdt[np.argmin(np.abs(y_kdt[:, None] - y_pred[None, :]), axis=0)]
             y_obs_gen = y_pred + eps_obs * y_err_matched
             gen = np.stack([x_obs_gen, y_obs_gen], axis=1)
             obs = np.stack([x_obs, y_obs], axis=1)
@@ -328,7 +310,8 @@ class TestConstructEnergyCompareJax:
             x_obs_gen,
             y_kdt=y_kdt,
             y_err_kdt=y_err_kdt,
-                                               permutations=50)
+            permutations=50,
+        )
         params = np.array([[3.0, 1.0, 0.6], [5.0, 1.0, 0.6]])
         stat_good, p_good = compare(params[[0]])[0]
         stat_bad, p_bad = compare(params[[1]])[0]
@@ -345,9 +328,9 @@ class TestConstructEnergyCompareJax:
             x_obs_gen,
             y_kdt=y_kdt,
             y_err_kdt=y_err_kdt,
-                                               permutations=20)
-        grid = np.array(list(itertools.product([2.8, 3.0, 3.2], [0.5, 1.0],
-                                               [0.3, 0.6])))
+            permutations=20,
+        )
+        grid = np.array(list(itertools.product([2.8, 3.0, 3.2], [0.5, 1.0], [0.3, 0.6])))
         res = compare(grid)
         assert res.shape == (12, 2)
         assert np.all((res[:, 1] > 0) & (res[:, 1] <= 1))
@@ -362,13 +345,13 @@ class TestConstructEnergyCompareJax:
             x_obs_gen,
             y_kdt=y_kdt,
             y_err_kdt=y_err_kdt,
-                                               permutations=20)
-        with pytest.raises(ValueError, match='must be 2D'):
+            permutations=20,
+        )
+        with pytest.raises(ValueError, match="must be 2D"):
             compare(np.array([3.0, 1.0, 0.6]))
 
 
 class TestMatchYErrJax:
-
     def test_matches_kdtree(self):
         rng = np.random.default_rng(11)
         y_pred = rng.uniform(-2, 2, size=100)
@@ -379,14 +362,16 @@ class TestMatchYErrJax:
         expected = y_err_kdt[idx]
 
         got = np.asarray(
-            match_y_err_jax(jnp.asarray(y_pred, dtype=jnp.float32),
-                            jnp.asarray(y_kdt, dtype=jnp.float32),
-                            jnp.asarray(y_err_kdt, dtype=jnp.float32)))
+            match_y_err_jax(
+                jnp.asarray(y_pred, dtype=jnp.float32),
+                jnp.asarray(y_kdt, dtype=jnp.float32),
+                jnp.asarray(y_err_kdt, dtype=jnp.float32),
+            )
+        )
         np.testing.assert_allclose(got, expected, rtol=1e-5)
 
 
 class TestConstructEnergyCompare:
-
     def _setup(self):
         rng = np.random.default_rng(5)
         x_gen = rng.uniform(1, 10, size=200)
@@ -398,17 +383,10 @@ class TestConstructEnergyCompare:
 
     def test_good_fit_smaller_statistic(self):
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
-        gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
-                                            params[1])
+        gen_cond = construct_generator_cond(lambda x, params: params[0] * x + params[1])
         compare = construct_energy_compare(
-            gen_cond,
-            x_gen,
-            x_gen,
-            y_kdt,
-            y_err_kdt,
-            x_obs=x_obs,
-            y_obs=y_obs,
-                                            permutations=50)
+            gen_cond, x_gen, x_gen, y_kdt, y_err_kdt, x_obs=x_obs, y_obs=y_obs, permutations=50
+        )
         np.random.seed(0)
         stat_good, p_good = compare(3.0, 1.0)
         stat_bad, p_bad = compare(5.0, 1.0)
@@ -417,17 +395,10 @@ class TestConstructEnergyCompare:
 
     def test_return_types(self):
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
-        gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
-                                            params[1])
+        gen_cond = construct_generator_cond(lambda x, params: params[0] * x + params[1])
         compare = construct_energy_compare(
-            gen_cond,
-            x_gen,
-            x_gen,
-            y_kdt,
-            y_err_kdt,
-            x_obs=x_obs,
-            y_obs=y_obs,
-                                            permutations=20)
+            gen_cond, x_gen, x_gen, y_kdt, y_err_kdt, x_obs=x_obs, y_obs=y_obs, permutations=20
+        )
         np.random.seed(1)
         stat, p = compare(3.0, 1.0)
         assert isinstance(stat, float)
@@ -436,8 +407,7 @@ class TestConstructEnergyCompare:
 
     def test_chunk_kwargs_reach_the_test(self, monkeypatch):
         x_gen, y_kdt, y_err_kdt, x_obs, y_obs = self._setup()
-        gen_cond = construct_generator_cond(lambda x, params: params[0] * x +
-                                            params[1])
+        gen_cond = construct_generator_cond(lambda x, params: params[0] * x + params[1])
         compare_chunk = construct_energy_compare(
             gen_cond,
             x_gen,
@@ -446,9 +416,10 @@ class TestConstructEnergyCompare:
             y_err_kdt,
             x_obs=x_obs,
             y_obs=y_obs,
-                                                 permutations=20,
-                                                 chunk_size=100,
-                                                 chunk_iter=10)
+            permutations=20,
+            chunk_size=100,
+            chunk_iter=10,
+        )
         stat, p = compare_chunk(3.0, 1.0)
         assert isinstance(stat, float)
         assert 0 < p <= 1
@@ -461,17 +432,12 @@ class TestConstructEnergyCompare:
             calls.update(kwargs)
             return real_energy_test(x, y, **kwargs)
 
-        monkeypatch.setattr(energy, 'energy_test', spy)
+        monkeypatch.setattr(energy, "energy_test", spy)
         compare_chunk(3.0, 1.0)
-        assert calls == {
-            'permutations': 20,
-            'chunk_size': 100,
-            'chunk_iter': 10
-        }
+        assert calls == {"permutations": 20, "chunk_size": 100, "chunk_iter": 10}
 
 
 class TestConstructEnergyLoss:
-
     def test_loss_smaller_for_true_params_and_differentiable(self):
         rng = np.random.default_rng(13)
         n = 200
@@ -485,14 +451,9 @@ class TestConstructEnergyLoss:
         def linear_jax(x, params, eps):
             return params[0] * x + params[1] + params[2] * eps
 
-        loss = construct_energy_loss(linear_jax,
-                                     x_obs,
-                                     y_obs,
-                                     x_gen,
-                                     x_obs_gen,
-                                     y_kdt=y_kdt,
-                                     y_err_kdt=y_err_kdt,
-                                     seed=0)
+        loss = construct_energy_loss(
+            linear_jax, x_obs, y_obs, x_gen, x_obs_gen, y_kdt=y_kdt, y_err_kdt=y_err_kdt, seed=0
+        )
         loss_good = loss(jnp.asarray([3.0, 1.0, 0.6], dtype=jnp.float32))
         loss_bad = loss(jnp.asarray([5.0, 1.0, 0.6], dtype=jnp.float32))
         assert float(loss_good) < float(loss_bad)

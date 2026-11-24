@@ -6,7 +6,7 @@
 
 - Lint no longer selects PLR0913 (too-many-arguments): estimator and training interfaces in this repo legitimately carry one slot per physical knob, so the rule only produced blanket waivers; the 27 `# noqa: PLR0913` comments (and their reason blocks) are removed and `ruff.toml` drops the rule and its `max-args` setting.
 - All relative imports are converted to absolute (`from raddest.x import ...`, `from utils.tools import ...` in the example helpers, 13 sites) and TID252 (ban relative imports) is selected in `ruff.toml` to keep the repo absolute.
-
+- The whole repository is formatted with `ruff format` (double quotes, 100 columns): package, tests, example helpers, and the Python code blocks embedded in `README.md` and the shipped `raddest-regression` skill's method guide; `ruff format --check` is clean.
 - `example/utils` (notebook helpers) gains type annotations, docstrings, and package/module docstrings; `setup.py` a module docstring.
 - Package misc: module docstrings for `raddest`, `raddest.GaussHermiteQuadrature`, `raddest.interpolator`; type annotations and docstrings in `raddest.interpolator` (its known dead reference stays recorded in TODO.md) and the jit closures of `raddest.x_xerr`.
 - `raddest.api.flowvi`: `FlowVI.__init__` takes `transfer_params` and the bounds keyword-only, `fit` takes everything after the data pair keyword-only, `sample` takes the ranges keyword-only, and `ks_test` takes everything after the data pair keyword-only. `raddest.api.utils` and `raddest.api.post_processer` gain type annotations and docstrings; all four modules gain module docstrings. The example notebooks are updated to the keyword forms (27 call sites).

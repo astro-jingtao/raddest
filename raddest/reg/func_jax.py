@@ -13,22 +13,24 @@ from numpy.typing import ArrayLike
 
 
 def sigmoid(x: ArrayLike, x0: float, beta: float) -> jax.Array:
-    '''Jax logistic sigmoid ``1 / (1 + exp(-beta * (x - x0)))``.'''
+    """Jax logistic sigmoid ``1 / (1 + exp(-beta * (x - x0)))``."""
     return _sigmoid(beta * (x - x0))
 
 
 @jit
-def saturated_linear_smooth_jax(x: ArrayLike,
-                                *,
-                                k: jax.Array,
-                                b: jax.Array,
-                                x0: jax.Array,
-                                x1: jax.Array,
-                                c0: jax.Array,
-                                c1: jax.Array,
-                                width: jax.Array = 0.01) -> jax.Array:
-    '''Jax twin of ``raddest.reg.func.saturated_linear_smooth``: sigmoid-blended
-    exponential tails around a linear core, all parameters keyword-only.'''
+def saturated_linear_smooth_jax(
+    x: ArrayLike,
+    *,
+    k: jax.Array,
+    b: jax.Array,
+    x0: jax.Array,
+    x1: jax.Array,
+    c0: jax.Array,
+    c1: jax.Array,
+    width: jax.Array = 0.01,
+) -> jax.Array:
+    """Jax twin of ``raddest.reg.func.saturated_linear_smooth``: sigmoid-blended
+    exponential tails around a linear core, all parameters keyword-only."""
 
     def get_pars(
         *,
@@ -51,8 +53,7 @@ def saturated_linear_smooth_jax(x: ArrayLike,
     w_high = sigmoid(x, x1, 1 / width)
     y_high = m1 * jnp.exp(n1 * x) + c1
     y_linear = k * x + b
-    y_smooth = w_low * y_low + w_high * y_high + (1 - w_low -
-                                                  w_high) * y_linear
+    y_smooth = w_low * y_low + w_high * y_high + (1 - w_low - w_high) * y_linear
     return y_smooth
 
 
@@ -68,22 +69,23 @@ def loglinear_scatter_jax(
     ``params = (k, b, sig)``:
     ``y = 10^(k * log10(x) + b + sig * eps)``.
     """
-    return jnp.power(10, params[0] * jnp.log10(jnp.abs(x)) + params[1] +
-                     params[2] * eps)
+    return jnp.power(10, params[0] * jnp.log10(jnp.abs(x)) + params[1] + params[2] * eps)
 
 
 def generate_piecewise_linear_jax(n: int) -> Callable:
-    '''Jax twin of ``raddest.reg.func.generate_piecewise_linear``; the returned
-    callable is ``piecewise_linear(x, *, b0, x0, k_lst, dx_lst, width=0.01)``.'''
+    """Jax twin of ``raddest.reg.func.generate_piecewise_linear``; the returned
+    callable is ``piecewise_linear(x, *, b0, x0, k_lst, dx_lst, width=0.01)``."""
 
     @jit
-    def piecewise_linear(x: ArrayLike,
-                         *,
-                         b0: jax.Array,
-                         x0: jax.Array,
-                         k_lst: jax.Array,
-                         dx_lst: jax.Array,
-                         width: jax.Array = 0.01) -> jax.Array:
+    def piecewise_linear(
+        x: ArrayLike,
+        *,
+        b0: jax.Array,
+        x0: jax.Array,
+        k_lst: jax.Array,
+        dx_lst: jax.Array,
+        width: jax.Array = 0.01,
+    ) -> jax.Array:
 
         y_lst = jnp.empty((n, *x.shape))
         w_lst = jnp.empty((n, *x.shape))

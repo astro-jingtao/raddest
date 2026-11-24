@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def get_wy_1d(n: int) -> tuple[jax.Array, jax.Array]:
-    '''Gauss-Hermite nodes and weights as (1, n) row arrays.'''
+    """Gauss-Hermite nodes and weights as (1, n) row arrays."""
     x, w = hermgauss(n)
     x = jnp.array(x.reshape(1, -1))
     w = jnp.array(w.reshape(1, -1))
@@ -34,14 +34,14 @@ def get_musig_1d(
     x_obs: ArrayLike,
     x_err: ArrayLike,
 ) -> tuple[jax.Array, jax.Array]:
-    '''Reshape (x_obs, x_err) into (N, 1) column arrays.'''
+    """Reshape (x_obs, x_err) into (N, 1) column arrays."""
     mu = jnp.array(x_obs.reshape(-1, 1))
     sig = jnp.array(x_err.reshape(-1, 1))
     return mu, sig
 
 
 def get_x_err_ext(x_err: ArrayLike, n: int) -> jax.Array:
-    '''Repeat x_err as (N, n) columns, one row per observation.'''
+    """Repeat x_err as (N, n) columns, one row per observation."""
     return jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
 
 
@@ -50,7 +50,7 @@ def get_ext_w(
     x_obs: ArrayLike,
     x_err: ArrayLike,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    '''1D Gauss-Hermite nodes around each observation with quadrature weights.'''
+    """1D Gauss-Hermite nodes around each observation with quadrature weights."""
     # https://en.wikipedia.org/wiki/Gauss%E2%80%93Hermite_quadrature
     x, w = get_wy_1d(n)
     mu, sig = get_musig_1d(x_obs, x_err)
@@ -60,12 +60,12 @@ def get_ext_w(
 
 
 def round_to_2power(x: float) -> int:
-    '''Round x up to the next power of 2.'''
-    return int(2**np.ceil(np.log2(x)))
+    """Round x up to the next power of 2."""
+    return int(2 ** np.ceil(np.log2(x)))
 
 
 def is_2power(x: float) -> bool:
-    '''True when x is an exact power of 2.'''
+    """True when x is an exact power of 2."""
     return np.log2(x) % 1 == 0
 
 
@@ -74,18 +74,27 @@ def get_ext_w_qmc(
     x_obs: ArrayLike,
     x_err: ArrayLike,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    '''Quasi-Monte-Carlo standard-normal draws as nodes with uniform weights;
-    n is rounded up to a power of 2 (with a printed notice).'''
+    """Quasi-Monte-Carlo standard-normal draws as nodes with uniform weights;
+    n is rounded up to a power of 2 (with a printed notice)."""
 
     if not is_2power(n):
         print(f"n={n} is not a power of 2, rounding to {round_to_2power(n)}")
         n = round_to_2power(n)
 
-    x = MultivariateNormalQMC(mean=[
-        0,
-    ], cov=[[
-        1,
-    ]]).random(n).T
+    x = (
+        MultivariateNormalQMC(
+            mean=[
+                0,
+            ],
+            cov=[
+                [
+                    1,
+                ]
+            ],
+        )
+        .random(n)
+        .T
+    )
     mu, sig = get_musig_1d(x_obs, x_err)
     x_ext = jnp.array(x * sig + mu)
     x_err_ext = jnp.repeat(x_err.reshape(-1, 1), n, axis=1)
@@ -99,14 +108,12 @@ def get_ext_w_inter_grid(
     x_err: ArrayLike,
     k: int = 5,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    '''Unit-interval grid stretched to each observation's k-sigma interval,
-    weighted by the Gaussian pdf times cell area.'''
+    """Unit-interval grid stretched to each observation's k-sigma interval,
+    weighted by the Gaussian pdf times cell area."""
     x_ext_edge = jnp.linspace(0, 1, n + 1)
     x_ext, area = edge_to_ext(x_obs.size, x_ext_edge)
-    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:,
-                                                                        None]
-    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:,
-                                                                        None]
+    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:, None]
+    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:, None]
     x_ext = x_ext * (_x_max - _x_min) + _x_min
     area = area * (_x_max - _x_min)
     x_err_ext = get_x_err_ext(x_err, n)
@@ -120,23 +127,23 @@ def edge_to_ext(
     N: int,
     x_ext_edge: ArrayLike,
 ) -> tuple[jax.Array, jax.Array]:
-    '''Cell centers repeated per observation and the cell areas.'''
+    """Cell centers repeated per observation and the cell areas."""
     x_ext = (x_ext_edge[1:] + x_ext_edge[:-1]) / 2
     x_ext = jnp.repeat(x_ext[None, :], N, axis=0)
-    area = (x_ext_edge[1:] - x_ext_edge[:-1])
+    area = x_ext_edge[1:] - x_ext_edge[:-1]
     return x_ext, area
 
 
 def ext_w_2d_empty_wrapper(func: Callable) -> Callable:
-    '''Make a 2D ext-w function tolerate empty inputs by returning five empty
-    arrays.'''
+    """Make a 2D ext-w function tolerate empty inputs by returning five empty
+    arrays."""
 
     @wraps(func)
-    def wrapper(*args: ArrayLike, **kwargs: ArrayLike) -> tuple[
-            jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    def wrapper(
+        *args: ArrayLike, **kwargs: ArrayLike
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         if len(args[0]) == 0:
-            return jnp.array([]), jnp.array([]), jnp.array([]), jnp.array(
-                []), jnp.array([])
+            return jnp.array([]), jnp.array([]), jnp.array([]), jnp.array([]), jnp.array([])
         return func(*args, **kwargs)
 
     return wrapper
@@ -150,7 +157,7 @@ def get_ext_w_2d(
     y_err: ArrayLike,
     n: int,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''2D Gauss-Hermite product nodes around each (x, y) observation.'''
+    """2D Gauss-Hermite product nodes around each (x, y) observation."""
     ghq = GaussHermiteQuadrature(dim=2, nodes=n)
     x = ghq.X[:, 0].reshape(1, -1)
     y = ghq.X[:, 1].reshape(1, -1)
@@ -172,23 +179,33 @@ def get_ext_w_2d_qmc(
     y_err: ArrayLike,
     n: int,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''2D quasi-Monte-Carlo nodes with uniform weights; n rounds up to a
-    power of 2 (with a printed notice).'''
+    """2D quasi-Monte-Carlo nodes with uniform weights; n rounds up to a
+    power of 2 (with a printed notice)."""
 
     if not is_2power(n):
         print(f"n={n} is not a power of 2, rounding to {round_to_2power(n)}")
         n = round_to_2power(n)
 
-    X = MultivariateNormalQMC(mean=[
-        0,
-        0,
-    ], cov=[[
-        1,
-        0,
-    ], [
-        0,
-        1,
-    ]]).random(n).T
+    X = (
+        MultivariateNormalQMC(
+            mean=[
+                0,
+                0,
+            ],
+            cov=[
+                [
+                    1,
+                    0,
+                ],
+                [
+                    0,
+                    1,
+                ],
+            ],
+        )
+        .random(n)
+        .T
+    )
 
     x_ext = X[0] * x_err.reshape(-1, 1) + x_obs.reshape(-1, 1)
     y_ext = X[1] * y_err.reshape(-1, 1) + y_obs.reshape(-1, 1)
@@ -208,20 +225,16 @@ def get_ext_w_2d_inter_grid(
     *,
     k: int = 5,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''Unit-interval 2D grid stretched to each observation's k-sigma box,
-    weighted by the product Gaussian pdf times cell area.'''
+    """Unit-interval 2D grid stretched to each observation's k-sigma box,
+    weighted by the product Gaussian pdf times cell area."""
     x_ext_edge = jnp.linspace(0, 1, n + 1)
     y_ext_edge = jnp.linspace(0, 1, n + 1)
     x_ext, y_ext, area = edge_to_ext_2d(x_obs.size, x_ext_edge, y_ext_edge)
 
-    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:,
-                                                                        None]
-    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:,
-                                                                        None]
-    _y_min = jnp.clip(y_obs - k * y_err, a_min=y_obs.min(), a_max=None)[:,
-                                                                        None]
-    _y_max = jnp.clip(y_obs + k * y_err, a_min=None, a_max=y_obs.max())[:,
-                                                                        None]
+    _x_min = jnp.clip(x_obs - k * x_err, a_min=x_obs.min(), a_max=None)[:, None]
+    _x_max = jnp.clip(x_obs + k * x_err, a_min=None, a_max=x_obs.max())[:, None]
+    _y_min = jnp.clip(y_obs - k * y_err, a_min=y_obs.min(), a_max=None)[:, None]
+    _y_max = jnp.clip(y_obs + k * y_err, a_min=None, a_max=y_obs.max())[:, None]
 
     # scale
     x_ext = x_ext * (_x_max - _x_min) + _x_min
@@ -231,8 +244,11 @@ def get_ext_w_2d_inter_grid(
     x_err_ext = get_x_err_ext(x_err, n * n)
     y_err_ext = get_x_err_ext(y_err, n * n)
 
-    w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
-        y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
+    w = (
+        norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None])
+        * norm.pdf(y_ext, loc=y_obs[:, None], scale=y_err[:, None])
+        * area
+    )
 
     return x_ext, y_ext, x_err_ext, y_err_ext, w
 
@@ -245,12 +261,12 @@ def get_ext_w_2d_grid(
     y_err: ArrayLike,
     n: int,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''Uniform-edge grid over the observed ranges.'''
+    """Uniform-edge grid over the observed ranges."""
     x_ext_edge = jnp.linspace(x_obs.min(), x_obs.max(), n + 1)
     y_ext_edge = jnp.linspace(y_obs.min(), y_obs.max(), n + 1)
-    return get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n,
-                                  x_ext_edge=x_ext_edge,
-                                  y_ext_edge=y_ext_edge)
+    return get_ext_w_2d_from_edge(
+        x_obs, y_obs, x_err, y_err, n, x_ext_edge=x_ext_edge, y_ext_edge=y_ext_edge
+    )
 
 
 @ext_w_2d_empty_wrapper
@@ -261,12 +277,12 @@ def get_ext_w_2d_qgrid(
     y_err: ArrayLike,
     n: int,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''Quantile-edge grid over the observed samples.'''
+    """Quantile-edge grid over the observed samples."""
     x_ext_edge = jnp.quantile(x_obs, jnp.linspace(0, 1, n + 1))
     y_ext_edge = jnp.quantile(y_obs, jnp.linspace(0, 1, n + 1))
-    return get_ext_w_2d_from_edge(x_obs, y_obs, x_err, y_err, n,
-                                  x_ext_edge=x_ext_edge,
-                                  y_ext_edge=y_ext_edge)
+    return get_ext_w_2d_from_edge(
+        x_obs, y_obs, x_err, y_err, n, x_ext_edge=x_ext_edge, y_ext_edge=y_ext_edge
+    )
 
 
 def get_ext_w_2d_from_edge(
@@ -279,12 +295,15 @@ def get_ext_w_2d_from_edge(
     x_ext_edge: ArrayLike,
     y_ext_edge: ArrayLike,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    '''Grid cells given explicit edges, weighted by the product Gaussian pdf
-    times cell area.'''
+    """Grid cells given explicit edges, weighted by the product Gaussian pdf
+    times cell area."""
     x_ext, y_ext, area = edge_to_ext_2d(x_obs.size, x_ext_edge, y_ext_edge)
 
-    w = norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None]) * norm.pdf(
-        y_ext, loc=y_obs[:, None], scale=y_err[:, None]) * area
+    w = (
+        norm.pdf(x_ext, loc=x_obs[:, None], scale=x_err[:, None])
+        * norm.pdf(y_ext, loc=y_obs[:, None], scale=y_err[:, None])
+        * area
+    )
 
     x_err_ext = get_x_err_ext(x_err, n * n)
     y_err_ext = get_x_err_ext(y_err, n * n)
@@ -296,7 +315,7 @@ def edge_to_ext_2d(
     x_ext_edge: ArrayLike,
     y_ext_edge: ArrayLike,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    '''2D cell centers (flattened, repeated per observation) and cell areas.'''
+    """2D cell centers (flattened, repeated per observation) and cell areas."""
     x_ext_cen = (x_ext_edge[:-1] + x_ext_edge[1:]) / 2
     y_ext_cen = (y_ext_edge[:-1] + y_ext_edge[1:]) / 2
     x_ext, y_ext = grid_and_flat(x_ext_cen, y_ext_cen)
@@ -339,8 +358,9 @@ def get_p_flow(
     if batch_size is None:
         # If n_batch is None, process the entire array
         concat_input = jnp.c_[x, x_err]  # Use jnp.c_ for concatenation
-        log_p = flow._log_prob(flow._params, concat_input,
-                               jnp.zeros(shape=(concat_input.shape[0], 1)))
+        log_p = flow._log_prob(
+            flow._params, concat_input, jnp.zeros(shape=(concat_input.shape[0], 1))
+        )
         return jnp.exp(log_p)
 
     # If n_batch is specified, process in chunks
@@ -352,11 +372,10 @@ def get_p_flow(
         x_batch = x[i:end_index]
         x_err_batch = x_err[i:end_index]
 
-        concat_input = jnp.c_[x_batch,
-                              x_err_batch]  # Use jnp.c_ for concatenation
+        concat_input = jnp.c_[x_batch, x_err_batch]  # Use jnp.c_ for concatenation
         log_p_batch = flow._log_prob(
-            flow._params, concat_input,
-            jnp.zeros(shape=(concat_input.shape[0], 1)))
+            flow._params, concat_input, jnp.zeros(shape=(concat_input.shape[0], 1))
+        )
         probabilities.append(jnp.exp(log_p_batch))
 
     return jnp.concatenate(probabilities)
@@ -369,13 +388,13 @@ def grid_and_flat(
     x_1d: ArrayLike,
     y_1d: ArrayLike,
 ) -> tuple[jax.Array, jax.Array]:
-    '''Meshgrid of two 1D arrays, flattened.'''
+    """Meshgrid of two 1D arrays, flattened."""
     x_grid, y_grid = jnp.meshgrid(x_1d, y_1d)
     return x_grid.flatten(), y_grid.flatten()
 
 
 def concat(*args: ArrayLike, axis: int = 0) -> jax.Array:
-    '''Concatenate skipping empty arrays.'''
+    """Concatenate skipping empty arrays."""
     to_concat = [arr for arr in args if arr.size > 0]
     return jnp.concatenate(to_concat, axis=axis)
 
@@ -386,7 +405,7 @@ def transform_data(
     transfer: Transfer | None,
     transfer_params: ArrayLike | None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    '''Apply transfer.trans when a transfer is given; pass through otherwise.'''
+    """Apply transfer.trans when a transfer is given; pass through otherwise."""
 
     if transfer is None:
         return x, x_err

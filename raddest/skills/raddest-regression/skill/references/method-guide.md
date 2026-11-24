@@ -11,6 +11,7 @@ import numpy as np
 from raddest.api.flowvi import FlowVI
 from raddest.transfer import NegLogPlus
 
+
 def fit_flow(v_obs, v_err):
     flow = FlowVI(
         x_min=float(v_obs.min()) * 0.5,
@@ -33,6 +34,7 @@ def fit_flow(v_obs, v_err):
     )
     return flow
 
+
 xflow = fit_flow(x_obs, x_err)
 yflow = fit_flow(y_obs, y_err)
 ```
@@ -49,8 +51,11 @@ from raddest.api.fitter import LogLinearML
 
 regressor = LogLinearML(xflow, yflow)
 params_ml, params_std, cov = regressor.fit(
-    x_obs, x_err, y_obs, y_err,
-    params_0=np.array([1.5, 0.0, 0.2]),   # (k, b, sig)
+    x_obs,
+    x_err,
+    y_obs,
+    y_err,
+    params_0=np.array([1.5, 0.0, 0.2]),  # (k, b, sig)
 )
 ```
 
@@ -73,11 +78,12 @@ from raddest.api.fitter import LogLinearKS
 
 regressor = LogLinearKS(xflow, yflow)
 params_mean, params_std, res_arr = regressor.fit(
-    x_obs, y_obs,
+    x_obs,
+    y_obs,
     params_list=[
-        np.linspace(1.0, 3.0, 10),   # k
+        np.linspace(1.0, 3.0, 10),  # k
         np.linspace(-0.5, 1.5, 10),  # b
-        np.linspace(0.05, 0.2, 5),   # sig
+        np.linspace(0.05, 0.2, 5),  # sig
     ],
     N=1000,
     num_process=10,
@@ -97,7 +103,8 @@ from raddest.api.fitter import LogLinearEnergyPT
 
 regressor = LogLinearEnergyPT(xflow, yflow, permutations=200)
 params_mean, params_std, res_arr = regressor.fit(
-    x_obs, y_obs,
+    x_obs,
+    y_obs,
     params_list=[
         np.linspace(1.0, 3.0, 10),
         np.linspace(-0.5, 1.5, 10),
@@ -123,7 +130,8 @@ from raddest.api.fitter import LogLinearEnergyGrad
 
 regressor = LogLinearEnergyGrad(xflow, yflow)
 params_hat, loss_history = regressor.fit(
-    x_obs, y_obs,
+    x_obs,
+    y_obs,
     jnp.asarray([1.5, 0.0, 0.2], dtype=jnp.float32),  # (k, b, sig)
     N=1000,
     lr=5e-2,
@@ -144,8 +152,7 @@ against the observed data:
 
 ```python
 D, p = regressor.ks_test((k_hat, b_hat, sig_hat), x_obs, y_obs, N=10000)
-E, p = regressor.energy_test((k_hat, b_hat, sig_hat), x_obs, y_obs,
-                             N=10000, permutations=200)
+E, p = regressor.energy_test((k_hat, b_hat, sig_hat), x_obs, y_obs, N=10000, permutations=200)
 ```
 
 `energy_test` also accepts `M` (subsample size of the observed data) and

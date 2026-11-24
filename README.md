@@ -50,15 +50,13 @@ Grid search weighted by energy-test p-values (each grid point generates a synthe
 from raddest.api.fitter import LogLinearEnergyPT
 
 regressor = LogLinearEnergyPT(xflow, yflow, permutations=200)
-params_mean, params_std, res_arr = regressor.fit(x_obs, y_obs,
-                                                 params_list=params_list,
-                                                 N=1000)
+params_mean, params_std, res_arr = regressor.fit(x_obs, y_obs, params_list=params_list, N=1000)
 ```
 
 Two options tame the `O((N + M)^2 * permutations)` cost of each grid point: `chunk_size`/`chunk_iter` estimate every distance on random sub-samples (`pted`'s chunked mode), and `backend='jax'` evaluates the whole grid in a single jax process with the permutation tests as batched matrix products — orders of magnitude faster on a GPU, and it needs no worker processes:
 
 ```python
-regressor = LogLinearEnergyPT(xflow, yflow, permutations=200, backend='jax')
+regressor = LogLinearEnergyPT(xflow, yflow, permutations=200, backend="jax")
 ```
 
 See `example/fit_loglinear_energy.ipynb` for a run of both optimizers and both grid backends.
@@ -70,9 +68,7 @@ from raddest.api.fitter import LogLinearEnergyGrad
 import jax.numpy as jnp
 
 regressor = LogLinearEnergyGrad(xflow, yflow)
-params_hat, loss_history = regressor.fit(x_obs, y_obs,
-                                         jnp.asarray([k0, b0, sig0]),
-                                         N=1000)
+params_hat, loss_history = regressor.fit(x_obs, y_obs, jnp.asarray([k0, b0, sig0]), N=1000)
 ```
 
 Both regressors also provide `energy_test(params, x_obs, y_obs)`, which evaluates the fitted model against the observed data with a fresh synthetic sample and returns the energy distance and its p-value. Each energy-test evaluation costs `O((N + M)^2 * permutations)`; reduce `N` or `permutations` for large datasets.

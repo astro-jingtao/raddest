@@ -14,15 +14,15 @@ cos, pi, arccos, log = np.cos, np.pi, np.arccos, np.log
 
 class GaussHermiteQuadrature:
     """
-        Class used to compute Gauss-Hermite quadrature nodes and weights in order
-        to evaluate an integral.
+    Class used to compute Gauss-Hermite quadrature nodes and weights in order
+    to evaluate an integral.
     """
 
     def __init__(self, dim: np.int32, nodes: np.int32) -> None:
         """
-            :param dim: The dimension of the function, integer
-            :param nodes: The number of nodes required, integer
-        
+        :param dim: The dimension of the function, integer
+        :param nodes: The number of nodes required, integer
+
         """
 
         # Defining characteristics for the object used to perform Gaussian-Hermite quadrature.
@@ -32,23 +32,21 @@ class GaussHermiteQuadrature:
         self.derive_ghw_1d()
 
         if self.D > 1:
-
             self.derive_ghw_nd()
 
     def derive_ghw_1d(self) -> None:
         """
-            Computes the node values and weights required.
+        Computes the node values and weights required.
         """
 
         self.X, self.W = hermgauss(deg=self.N)
 
     def derive_ghw_nd(self) -> None:
         """
-            Computes a matrix of quadrature nodes and a vector of corresponding weights.
+        Computes a matrix of quadrature nodes and a vector of corresponding weights.
         """
 
-        x_d = np.array(list(itertools.product(*(self.X, ) * self.D)))
-        w_d = np.prod(np.array(list(itertools.product(*(self.W, ) * self.D))),
-                      1)
+        x_d = np.array(list(itertools.product(*(self.X,) * self.D)))
+        w_d = np.prod(np.array(list(itertools.product(*(self.W,) * self.D))), 1)
 
         self.X, self.W = x_d, w_d

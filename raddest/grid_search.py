@@ -52,54 +52,47 @@ def grid_search(
 
 
 def zoom_in_grid(
-                 func: Callable,
-                 params: list,
-                 w_index: int,
-                 parser: Callable,
-                 gen_new_grid: Callable,
-                 *,
-                 print_mean_std: Callable,
-                 num_process: int = 10,
-                 max_i: int = 10,
-                 rtol: float = 1e-3,
-                 atol: float = 1e-3,
-                 verbose: bool = False,
-                 batch_func: Callable | None = None) -> np.ndarray:
+    func: Callable,
+    params: list,
+    w_index: int,
+    parser: Callable,
+    gen_new_grid: Callable,
+    *,
+    print_mean_std: Callable,
+    num_process: int = 10,
+    max_i: int = 10,
+    rtol: float = 1e-3,
+    atol: float = 1e-3,
+    verbose: bool = False,
+    batch_func: Callable | None = None,
+) -> np.ndarray:
     """Iterate grid_search with grids regenerated from the weighted fit,
     stopping when the first three weighted means converge (rtol/atol) or
     after max_i rounds."""
     n_par = len(params)
-    res_arr = grid_search(func, params, parser, num_process=num_process,
-                          batch_func=batch_func)
-    res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T,
-                                         res_arr[:, w_index])
+    res_arr = grid_search(func, params, parser, num_process=num_process, batch_func=batch_func)
+    res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T, res_arr[:, w_index])
 
     if verbose:
         print_mean_std(res_mean, res_std)
 
     for _ in range(max_i):
-
         params = gen_new_grid(res_arr, n_par=n_par, w_index=w_index)
-        res_arr = grid_search(func, params, parser, num_process=num_process,
-                              batch_func=batch_func)
-        res_mean_new, res_std_new = get_weighted_res(res_arr[:, :n_par].T,
-                                                     res_arr[:, w_index])
+        res_arr = grid_search(func, params, parser, num_process=num_process, batch_func=batch_func)
+        res_mean_new, res_std_new = get_weighted_res(res_arr[:, :n_par].T, res_arr[:, w_index])
         if verbose:
             print_mean_std(res_mean_new, res_std_new)
 
         # 收敛判断
-        if np.allclose((res_mean_new - res_mean)[:3] / res_mean[:3],
-                       0,
-                       rtol=rtol,
-                       atol=atol):
+        if np.allclose((res_mean_new - res_mean)[:3] / res_mean[:3], 0, rtol=rtol, atol=atol):
             if verbose:
-                print('converge')
+                print("converge")
             return res_arr
         res_mean = res_mean_new
         res_std = res_std_new
 
     if verbose:
-        print('max iteration reached')
+        print("max iteration reached")
 
     return res_arr
 
@@ -112,22 +105,22 @@ def gen_grid(
     _range: tuple[float, float],
 ) -> np.ndarray:
     """n points from cen-d_low to cen+d_up, clipped to _range."""
-    return np.linspace(max(_range[0], cen - d_low), min(_range[1], cen + d_up),
-                       n)
+    return np.linspace(max(_range[0], cen - d_low), min(_range[1], cen + d_up), n)
 
 
-def gen_new_grid_mean_std(res_arr: np.ndarray,
-                          *,
-                          n_par: int,
-                          w_index: int,
-                          n: int | float | list = 10,
-                          n_sigma: int | float | list = 2,
-                          d_par_min: float | list = 0.2,
-                          range_par: list | None = None) -> list:
+def gen_new_grid_mean_std(
+    res_arr: np.ndarray,
+    *,
+    n_par: int,
+    w_index: int,
+    n: int | float | list = 10,
+    n_sigma: int | float | list = 2,
+    d_par_min: float | list = 0.2,
+    range_par: list | None = None,
+) -> list:
     """New grid per parameter: weighted mean +/- n_sigma*std (min d_par_min),
     clipped to range_par; scalars broadcast to per-parameter lists."""
-    res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T,
-                                         res_arr[:, w_index])
+    res_mean, res_std = get_weighted_res(res_arr[:, :n_par].T, res_arr[:, w_index])
 
     # if n, n_sigma, d_par_min are integers/floats, we convert them to lists of integers
     if isinstance(n, (int, float)):
@@ -144,21 +137,22 @@ def gen_new_grid_mean_std(res_arr: np.ndarray,
 
     for i in range(n_par):
         d_this_par = max(d_par_min[i], n_sigma[i] * res_std[i])
-        new_list.append(
-            gen_grid(res_mean[i], d_this_par, d_this_par, n[i], range_par[i]))
+        new_list.append(gen_grid(res_mean[i], d_this_par, d_this_par, n[i], range_par[i]))
 
     return new_list
 
 
-def gen_new_grid_quantile(res_arr: np.ndarray,
-                          *,
-                          n_par: int,
-                          w_index: int,
-                          n: int | float | list = 10,
-                          q_low: float | list = 0.16,
-                          q_up: float | list = 0.84,
-                          d_par_min: float | list = 0.2,
-                          range_par: list | None = None) -> list:
+def gen_new_grid_quantile(
+    res_arr: np.ndarray,
+    *,
+    n_par: int,
+    w_index: int,
+    n: int | float | list = 10,
+    q_low: float | list = 0.16,
+    q_up: float | list = 0.84,
+    d_par_min: float | list = 0.2,
+    range_par: list | None = None,
+) -> list:
     """New grid per parameter around the weighted median, spanning the
     [q_low, q_up] weighted quantiles (min half-width d_par_min), clipped to
     range_par; scalars broadcast to per-parameter lists."""
@@ -178,14 +172,13 @@ def gen_new_grid_quantile(res_arr: np.ndarray,
     new_list = []
 
     for i in range(n_par):
-        q_low_value, med, q_up_value = quantile(res_arr[:, i],
-                                                [q_low[i], 0.5, q_up[i]],
-                                                weights=res_arr[:, w_index])
+        q_low_value, med, q_up_value = quantile(
+            res_arr[:, i], [q_low[i], 0.5, q_up[i]], weights=res_arr[:, w_index]
+        )
         d_low = max(d_par_min[i], med - q_low_value)
         d_up = max(d_par_min[i], q_up_value - med)
 
-        new_list.append(
-            gen_grid(med, d_low, d_up, n[i], range_par[i]))
+        new_list.append(gen_grid(med, d_low, d_up, n[i], range_par[i]))
 
     return new_list
 
@@ -225,11 +218,11 @@ def quantile(
        ``[0, 1]``.
 
     weights : Optional[array_like[nsamples,]]
-        An optional weight corresponding to each sample. 
-    
+        An optional weight corresponding to each sample.
+
     N_min : int
         The minimum number of samples required in an output bin. If there are
-        not enough samples, the bin will be returned as `nan`. 
+        not enough samples, the bin will be returned as `nan`.
 
     Returns
     -------

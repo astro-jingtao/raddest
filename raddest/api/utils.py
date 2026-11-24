@@ -9,9 +9,9 @@ from numpy.typing import ArrayLike
 from raddest.reg.constructor import parse_piecewise_params
 
 
-def to_each_piece_params(n_piece: int,
-                         params: ArrayLike) -> tuple[np.ndarray, np.ndarray,
-                                                     np.ndarray, float]:
+def to_each_piece_params(
+    n_piece: int, params: ArrayLike
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """Regroup (b0, x0, k_lst, dx_lst, sig) into per-segment (k_lst, b_lst,
     x_lst) plus the scatter sig."""
 
@@ -34,11 +34,10 @@ def to_each_piece_params(n_piece: int,
 
 
 def to_each_piece_params_studentT(
-        n_piece: int, params: ArrayLike) -> tuple[np.ndarray, np.ndarray,
-                                                 np.ndarray, float, float]:
+    n_piece: int, params: ArrayLike
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
     """to_each_piece_params with a student-t df prepended at the end."""
     df = params[-2]
-    k_lst, b_lst, x_lst, sig = to_each_piece_params(n_piece,
-                                                    [*params[:-2], params[-1]])
+    k_lst, b_lst, x_lst, sig = to_each_piece_params(n_piece, [*params[:-2], params[-1]])
     df = float(df)
     return k_lst, b_lst, x_lst, sig, df

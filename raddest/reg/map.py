@@ -26,18 +26,18 @@ if TYPE_CHECKING:
     from pzflow import Flow
 
 _SIMPLE_INT_METHODS: dict[str, Callable] = {
-    'ghq': get_ext_w_2d,
-    'qmc': get_ext_w_2d_qmc,
-    'grid': get_ext_w_2d_grid,
-    'qgrid': get_ext_w_2d_qgrid,
-    'inter_grid': get_ext_w_2d_inter_grid,
+    "ghq": get_ext_w_2d,
+    "qmc": get_ext_w_2d_qmc,
+    "grid": get_ext_w_2d_grid,
+    "qgrid": get_ext_w_2d_qgrid,
+    "inter_grid": get_ext_w_2d_inter_grid,
 }
 
 # Hybrid methods: ghq for well-behaved points, the mapped integrator for
 # points whose errors are large relative to the data spread.
 _HYBRID_INT_METHODS: dict[str, Callable] = {
-    'ghq+qgrid': get_ext_w_2d_qgrid,
-    'ghq+grid': get_ext_w_2d_grid,
+    "ghq+qgrid": get_ext_w_2d_qgrid,
+    "ghq+grid": get_ext_w_2d_grid,
 }
 
 
@@ -54,15 +54,13 @@ def _resolve_int_method(
     spread (84th minus 16th percentile); errors wider than half the spread
     need the quantile-grid integrator instead of sparse Gauss-Hermite nodes.
     """
-    if int_method != 'auto':
+    if int_method != "auto":
         return int_method
-    x_err_ratio = 2 * jnp.median(x_err) / (jnp.percentile(x_obs, 84) -
-                                           jnp.percentile(x_obs, 16))
-    y_err_ratio = 2 * jnp.median(y_err) / (jnp.percentile(y_obs, 84) -
-                                           jnp.percentile(y_obs, 16))
+    x_err_ratio = 2 * jnp.median(x_err) / (jnp.percentile(x_obs, 84) - jnp.percentile(x_obs, 16))
+    y_err_ratio = 2 * jnp.median(y_err) / (jnp.percentile(y_obs, 84) - jnp.percentile(y_obs, 16))
     if (x_err_ratio > 0.5) or (y_err_ratio > 0.5):
-        return 'qgrid'
-    return 'ghq'
+        return "qgrid"
+    return "ghq"
 
 
 def _get_ext_w_hybrid(
@@ -76,26 +74,30 @@ def _get_ext_w_hybrid(
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Per-point hybrid integration: ghq nodes where errors are small,
     ``second_fn`` nodes where an error ratio exceeds 0.5, ghq block first."""
-    x_err_ratio = 2 * x_err / (jnp.percentile(x_obs, 84) -
-                               jnp.percentile(x_obs, 16))
-    y_err_ratio = 2 * y_err / (jnp.percentile(y_obs, 84) -
-                               jnp.percentile(y_obs, 16))
+    x_err_ratio = 2 * x_err / (jnp.percentile(x_obs, 84) - jnp.percentile(x_obs, 16))
+    y_err_ratio = 2 * y_err / (jnp.percentile(y_obs, 84) - jnp.percentile(y_obs, 16))
     to_use_second = (x_err_ratio > 0.5) | (y_err_ratio > 0.5)
 
     x_ext_ghq, y_ext_ghq, x_err_ext_ghq, y_err_ext_ghq, w_ghq = get_ext_w_2d(
-        x_obs[~to_use_second], y_obs[~to_use_second], x_err[~to_use_second],
-        y_err[~to_use_second], n)
+        x_obs[~to_use_second],
+        y_obs[~to_use_second],
+        x_err[~to_use_second],
+        y_err[~to_use_second],
+        n,
+    )
     w_ghq = jnp.repeat(w_ghq[None, :], (~to_use_second).sum(), axis=0)
 
-    x_ext_second, y_ext_second, x_err_ext_second, y_err_ext_second, w_second \
-        = second_fn(x_obs[to_use_second], y_obs[to_use_second],
-                    x_err[to_use_second], y_err[to_use_second], n)
+    x_ext_second, y_ext_second, x_err_ext_second, y_err_ext_second, w_second = second_fn(
+        x_obs[to_use_second], y_obs[to_use_second], x_err[to_use_second], y_err[to_use_second], n
+    )
 
-    return (concat(x_ext_ghq, x_ext_second, axis=0),
-            concat(y_ext_ghq, y_ext_second, axis=0),
-            concat(x_err_ext_ghq, x_err_ext_second, axis=0),
-            concat(y_err_ext_ghq, y_err_ext_second, axis=0),
-            concat(w_ghq, w_second, axis=0))
+    return (
+        concat(x_ext_ghq, x_ext_second, axis=0),
+        concat(y_ext_ghq, y_ext_second, axis=0),
+        concat(x_err_ext_ghq, x_err_ext_second, axis=0),
+        concat(y_err_ext_ghq, y_err_ext_second, axis=0),
+        concat(w_ghq, w_second, axis=0),
+    )
 
 
 def _get_ext_w(
@@ -141,96 +143,91 @@ def _flow_p(
     return p.reshape(shape)
 
 
-def get_xyw_trans(x_obs: ArrayLike,
-                  y_obs: ArrayLike,
-                  x_err: ArrayLike,
-                  y_err: ArrayLike,
-                  *,
-                  flowx: Flow,
-                  flowy: Flow,
-                  x_range: tuple[float, float],
-                  x_err_range: tuple[float, float],
-                  y_range: tuple[float, float],
-                  y_err_range: tuple[float, float],
-                  int_method: str = 'ghq',
-                  ignore_y_err_c_y: bool = False,
-                  flow_batch_size: int | None = None,
-                  kde_batch_size: int | None = None,
-                  get_w_add: Callable[
-                      [ArrayLike, ArrayLike, ArrayLike, ArrayLike], ArrayLike
-                  ] | None = None,
-                  x_transfer: Transfer | None = None,
-                  x_transfer_params: ArrayLike | None = None,
-                  y_transfer: Transfer | None = None,
-                  y_transfer_params: ArrayLike | None = None,
-                  n: int = 21) -> tuple[jax.Array, jax.Array, jax.Array]:
-    '''Grid points and weights for the 2D (obs, err) integration of both axes.
+def get_xyw_trans(
+    x_obs: ArrayLike,
+    y_obs: ArrayLike,
+    x_err: ArrayLike,
+    y_err: ArrayLike,
+    *,
+    flowx: Flow,
+    flowy: Flow,
+    x_range: tuple[float, float],
+    x_err_range: tuple[float, float],
+    y_range: tuple[float, float],
+    y_err_range: tuple[float, float],
+    int_method: str = "ghq",
+    ignore_y_err_c_y: bool = False,
+    flow_batch_size: int | None = None,
+    kde_batch_size: int | None = None,
+    get_w_add: Callable[[ArrayLike, ArrayLike, ArrayLike, ArrayLike], ArrayLike] | None = None,
+    x_transfer: Transfer | None = None,
+    x_transfer_params: ArrayLike | None = None,
+    y_transfer: Transfer | None = None,
+    y_transfer_params: ArrayLike | None = None,
+    n: int = 21,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Grid points and weights for the 2D (obs, err) integration of both axes.
 
     Here x_range, x_err_range, y_range, y_err_range are for original varibles, not transformed ones.
 
     get_w_add: callable, (x_ext, y_ext, x_err_ext, y_err_ext) -> w_add, additional weight for each point.
-    '''
+    """
 
     # x, x_err | y, y_err <-> u, v
 
     int_method = _resolve_int_method(int_method, x_obs, y_obs, x_err, y_err)
     _x_ext, _y_ext, _x_err_ext, _y_err_ext, _w = _get_ext_w(
-        int_method, x_obs, y_obs, x_err, y_err, n=n)
+        int_method, x_obs, y_obs, x_err, y_err, n=n
+    )
 
-    ux_ext, vx_ext = _apply_transfer(x_transfer, x_transfer_params,
-                                     _x_ext, _x_err_ext)
-    uy_ext, vy_ext = _apply_transfer(y_transfer, y_transfer_params,
-                                     _y_ext, _y_err_ext)
+    ux_ext, vx_ext = _apply_transfer(x_transfer, x_transfer_params, _x_ext, _x_err_ext)
+    uy_ext, vy_ext = _apply_transfer(y_transfer, y_transfer_params, _y_ext, _y_err_ext)
 
     x_min, x_max = x_range
     x_err_min, x_err_max = x_err_range
     y_min, y_max = y_range
     y_err_min, y_err_max = y_err_range
 
-    is_in_range_x = (_x_ext > x_min) & (_x_ext < x_max) & (
-        _x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
-    is_in_range_y = (_y_ext > y_min) & (_y_ext < y_max) & (
-        _y_err_ext > y_err_min) & (_y_err_ext < y_err_max)
+    is_in_range_x = (
+        (_x_ext > x_min) & (_x_ext < x_max) & (_x_err_ext > x_err_min) & (_x_err_ext < x_err_max)
+    )
+    is_in_range_y = (
+        (_y_ext > y_min) & (_y_ext < y_max) & (_y_err_ext > y_err_min) & (_y_err_ext < y_err_max)
+    )
     is_in_range = is_in_range_x & is_in_range_y
 
     s1, s2 = ux_ext.shape
     # px_xerr : w1
     px_xerr = _flow_p(flowx, ux_ext, vx_ext, (s1, s2), flow_batch_size)
     if x_transfer is not None:
-        px_xerr = px_xerr * x_transfer.jac(_x_ext,
-                                           _x_err_ext,
-                                           params=x_transfer_params)
+        px_xerr = px_xerr * x_transfer.jac(_x_ext, _x_err_ext, params=x_transfer_params)
     px_xerr = jnp.where(is_in_range, px_xerr, 0)
 
     # wy: w2
 
     samples = flowy.sample(20000, seed=0)
-    uy_sample = samples['x_obs'].to_numpy()
-    vy_sample = samples['x_err'].to_numpy()
+    uy_sample = samples["x_obs"].to_numpy()
+    vy_sample = samples["x_err"].to_numpy()
     if y_transfer is None:
         y_sample = uy_sample
     else:
-        y_sample, _ = y_transfer.inv(uy_sample,
-                                     vy_sample,
-                                     params=y_transfer_params)
+        y_sample, _ = y_transfer.inv(uy_sample, vy_sample, params=y_transfer_params)
 
     if ignore_y_err_c_y:
         wy = jnp.ones_like(uy_ext)
     else:
-
         kernel_y = gaussian_kde(y_sample)
 
         if kde_batch_size is None:
             py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
         else:
-            py = kde_pdf_batch(kernel_y,
-                               _y_ext.flatten(),
-                               batch_size=kde_batch_size).reshape(s1, s2)
+            py = kde_pdf_batch(kernel_y, _y_ext.flatten(), batch_size=kde_batch_size).reshape(
+                s1, s2
+            )
 
         py_yerr = _flow_p(flowy, uy_ext, vy_ext, (s1, s2), flow_batch_size)
         if y_transfer is not None:
-            py_yerr = py_yerr * y_transfer.jac(
-                _y_ext, _y_err_ext, params=y_transfer_params)
+            py_yerr = py_yerr * y_transfer.jac(_y_ext, _y_err_ext, params=y_transfer_params)
 
         eps = 1e-10
         wy = jnp.where(is_in_range, py_yerr / (py + eps), 0)
@@ -256,7 +253,7 @@ def get_w_add_lognorm(
     x_err_ext: ArrayLike,
     y_err_ext: ArrayLike,
 ) -> jax.Array:
-    '''Additional weight for log-normal y: 1 / (y ln 10), the log10 Jacobian.'''
+    """Additional weight for log-normal y: 1 / (y ln 10), the log10 Jacobian."""
     return 1 / y_ext / np.log(10)
 
 
@@ -265,7 +262,7 @@ def kde_pdf_batch(
     x: ArrayLike,
     batch_size: int = 100000,
 ) -> jax.Array:
-    '''Evaluate a kde kernel on ``x`` in batches, keeping memory bounded.'''
+    """Evaluate a kde kernel on ``x`` in batches, keeping memory bounded."""
     n = x.shape[0]
     pdf = jnp.zeros(n)
 

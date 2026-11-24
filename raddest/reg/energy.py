@@ -79,9 +79,7 @@ def energy_distance_jax(x: jax.Array, y: jax.Array) -> jax.Array:
     instead of differentiating this function.
     """
     if x.shape[1:] != y.shape[1:]:
-        raise ValueError(
-            f"x and y must have the same feature shape, not {x.shape} and {y.shape}"
-        )
+        raise ValueError(f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
     d_xx = _jax_cdist(x, x)
     d_yy = _jax_cdist(y, y)
     d_xy = _jax_cdist(x, y)
@@ -103,11 +101,13 @@ def _energy_distance_u_jax(x: jax.Array, y: jax.Array) -> jax.Array:
     n = x.shape[0]
     m = y.shape[0]
     d_xx = jnp.sqrt(jnp.maximum(_jax_cdist_sq(x, x), _SQRT_FLOOR)) * (
-        1.0 - jnp.eye(n, dtype=x.dtype))
+        1.0 - jnp.eye(n, dtype=x.dtype)
+    )
     e_xx = jax.lax.stop_gradient(jnp.sum(d_xx) / (n * (n - 1)))
 
     d_yy = jnp.sqrt(jnp.maximum(_jax_cdist_sq(y, y), _SQRT_FLOOR)) * (
-        1.0 - jnp.eye(m, dtype=y.dtype))
+        1.0 - jnp.eye(m, dtype=y.dtype)
+    )
     e_yy = jnp.sum(d_yy) / (m * (m - 1))
 
     d_xy = jnp.sqrt(jnp.maximum(_jax_cdist_sq(x, y), _SQRT_FLOOR))
@@ -135,9 +135,7 @@ def energy_distance_numpy(x: np.ndarray, y: np.ndarray) -> float:
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     if x.shape[1:] != y.shape[1:]:
-        raise ValueError(
-            f"x and y must have the same feature shape, not {x.shape} and {y.shape}"
-        )
+        raise ValueError(f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
     z = np.concatenate((x, y), axis=0)
     d = cdist(z, z)
     nx = len(x)
@@ -269,19 +267,16 @@ def energy_test(
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     if x.ndim < 2 or y.ndim < 2:
-        raise ValueError(
-            f"x and y must be at least 2D (N, D), not {x.shape} and {y.shape}"
-        )
+        raise ValueError(f"x and y must be at least 2D (N, D), not {x.shape} and {y.shape}")
     if x.shape[1:] != y.shape[1:]:
-        raise ValueError(
-            f"x and y must have the same feature shape, not {x.shape} and {y.shape}"
-        )
+        raise ValueError(f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
     if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
         raise ValueError("Input contains NaN or Inf")
     if (chunk_size is None) != (chunk_iter is None):
         raise ValueError(
             "chunk_size and chunk_iter must be given together for chunked "
-            "estimation, or both left as None")
+            "estimation, or both left as None"
+        )
 
     if rng is None:
         rng = np.random.default_rng()
@@ -291,21 +286,14 @@ def energy_test(
     if chunk_size is None:
         test_stat, count = _energy_test_full(x, y, z, permutations, rng)
     else:
-        test_stat, count = _energy_test_chunked(x,
-                                                y,
-                                                z,
-                                                permutations,
-                                                rng,
-                                                chunk_size=chunk_size,
-                                                chunk_iter=chunk_iter)
+        test_stat, count = _energy_test_chunked(
+            x, y, z, permutations, rng, chunk_size=chunk_size, chunk_iter=chunk_iter
+        )
 
     return float(test_stat), float((1 + count) / (1 + permutations))
 
 
-def _permutation_masks(n: int,
-                       nx: int,
-                       permutations: int,
-                       seed: int) -> jax.Array:
+def _permutation_masks(n: int, nx: int, permutations: int, seed: int) -> jax.Array:
     """Membership masks of ``permutations`` pooled-sample permutations.
 
     Row ``p`` is 1 where permutation ``p`` assigns the pooled point to the
@@ -325,8 +313,7 @@ def _masked_energy_stats(d: jax.Array, nx: int, masks: jax.Array) -> jax.Array:
     """
     n = d.shape[0]
     ny = n - nx
-    m0 = jnp.concatenate([jnp.ones(nx, dtype=d.dtype),
-                          jnp.zeros(ny, dtype=d.dtype)])
+    m0 = jnp.concatenate([jnp.ones(nx, dtype=d.dtype), jnp.zeros(ny, dtype=d.dtype)])
     eye_masks = jnp.concatenate([m0[None], masks], axis=0)
 
     left = eye_masks @ d  # (1 + P, n)
@@ -373,11 +360,9 @@ def energy_test_jax(
     x = jnp.asarray(x, dtype=jnp.float32)
     y = jnp.asarray(y, dtype=jnp.float32)
     if x.ndim < 2 or y.ndim < 2:
-        raise ValueError(
-            f"x and y must be at least 2D (N, D), not {x.shape} and {y.shape}")
+        raise ValueError(f"x and y must be at least 2D (N, D), not {x.shape} and {y.shape}")
     if x.shape[1:] != y.shape[1:]:
-        raise ValueError(
-            f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
+        raise ValueError(f"x and y must have the same feature shape, not {x.shape} and {y.shape}")
 
     @jax.jit
     def run() -> jax.Array:
@@ -447,18 +432,15 @@ def construct_energy_compare(
         ``energy_compare(*params) -> (test_stat, p_value)``.
     """
 
-    obs = np.stack([np.asarray(x_obs, dtype=float), np.asarray(y_obs, dtype=float)],
-                   axis=1)
+    obs = np.stack([np.asarray(x_obs, dtype=float), np.asarray(y_obs, dtype=float)], axis=1)
     x_obs_gen = np.asarray(x_obs_gen, dtype=float)
 
     def energy_compare(*params: float) -> tuple[float, float]:
         _, _, y_obs_gen = generator_cond(x_gen, y_kdt, y_err_kdt, params)
         gen = np.stack([x_obs_gen, np.asarray(y_obs_gen, dtype=float)], axis=1)
-        return energy_test(gen,
-                           obs,
-                           permutations=permutations,
-                           chunk_size=chunk_size,
-                           chunk_iter=chunk_iter)
+        return energy_test(
+            gen, obs, permutations=permutations, chunk_size=chunk_size, chunk_iter=chunk_iter
+        )
 
     return energy_compare
 
@@ -548,8 +530,7 @@ def construct_energy_compare_jax(
     y_err_kdt_j = jnp.asarray(y_err_kdt, dtype=jnp.float32)
     y_fill = jnp.asarray(np.mean(y_kdt), dtype=jnp.float32)
 
-    masks = _permutation_masks(obs_2d.shape[0] + len(x_gen), len(x_gen),
-                               permutations, seed)
+    masks = _permutation_masks(obs_2d.shape[0] + len(x_gen), len(x_gen), permutations, seed)
 
     def _one_grid_point(params: jax.Array) -> jax.Array:
         y_pred = func_x2y_jax(x_gen_j, params, eps_scatter)
@@ -568,14 +549,12 @@ def construct_energy_compare_jax(
     # one jitted call evaluates the whole grid: lax.map walks the grid points
     # sequentially on the device, so peak memory stays at one point's
     # distance matrix and permutation intermediates.
-    run_grid = jax.jit(
-        lambda params_grid: jax.lax.map(_one_grid_point, params_grid))
+    run_grid = jax.jit(lambda params_grid: jax.lax.map(_one_grid_point, params_grid))
 
     def energy_compare_batch(params_grid: np.ndarray) -> np.ndarray:
         params_grid = jnp.asarray(params_grid, dtype=jnp.float32)
         if params_grid.ndim != 2:
-            raise ValueError(
-                f"params_grid must be 2D (G, n_par), not {params_grid.shape}")
+            raise ValueError(f"params_grid must be 2D (G, n_par), not {params_grid.shape}")
         res = run_grid(params_grid)
         return np.asarray(res)
 

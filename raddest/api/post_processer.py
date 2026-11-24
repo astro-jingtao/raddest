@@ -13,11 +13,13 @@ from raddest.api.flowvi import FlowVI
 from raddest.transfer import XShift, combine_transfers
 
 
-def post_shift(x_obs: ArrayLike,
-               x_err: ArrayLike,
-               flow_vi: FlowVI,
-               N: int = 10000,
-               shift_method: str = 'median') -> FlowVI:
+def post_shift(
+    x_obs: ArrayLike,
+    x_err: ArrayLike,
+    flow_vi: FlowVI,
+    N: int = 10000,
+    shift_method: str = "median",
+) -> FlowVI:
     """Apply the best KS-improving x shift transform to a copy of flow_vi.
 
     Returns the shifted copy when its KS p-value beats the original's,
@@ -42,17 +44,15 @@ def post_shift(x_obs: ArrayLike,
     return flow_vi if p_old < p_new else flow_vi_old
 
 
-def get_shift(x_obs: ArrayLike,
-              x_obs_gen: ArrayLike,
-              method: str = 'median') -> float:
+def get_shift(x_obs: ArrayLike, x_obs_gen: ArrayLike, method: str = "median") -> float:
     """Shift between observed and generated x: 'median', 'mean', or the
     'histogram' peak difference."""
 
-    if method == 'median':
+    if method == "median":
         return np.median(x_obs_gen) - np.median(x_obs)
-    if method == 'mean':
+    if method == "mean":
         return np.mean(x_obs_gen) - np.mean(x_obs)
-    if method == 'histogram':
+    if method == "histogram":
         _range = np.percentile(x_obs, [25, 75])
 
         N_gen, edges_gen = np.histogram(x_obs_gen, bins=101, range=_range)

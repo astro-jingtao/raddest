@@ -15,14 +15,15 @@ class MyPchipInterpolator:
     does not exist (see TODO.md).
     """
 
-    def __init__(self,
-                 coefficients: ArrayLike | None = None,
-                 breakpoints: ArrayLike | None = None) -> None:
+    def __init__(
+        self, coefficients: ArrayLike | None = None, breakpoints: ArrayLike | None = None
+    ) -> None:
         """Store the PPoly pieces and derive the inverse (unimplemented)."""
         self.coefficients = coefficients
         self.breakpoints = breakpoints
         self.inv_coefficients, self.inv_breakpoints = self.get_inverse_coefficients_breakpoints(
-            coefficients, breakpoints)
+            coefficients, breakpoints
+        )
 
     @classmethod
     def from_data(cls, x: ArrayLike, y: ArrayLike) -> MyPchipInterpolator:
