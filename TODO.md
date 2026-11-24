@@ -9,4 +9,13 @@ Deferred `ruff` findings (config: `ruff.toml`, introduced with the ruff setup). 
 
 ## Structural campaigns (bulk work, schedule explicitly)
 
-- (none — the annotation, docstring, and wide-signature campaigns were completed on 2026-10-29; PLR0913 sites carry per-site `# noqa` waivers with reasons, PLR0917 was resolved by keyword-only conversions.)
+- (none — the annotation, docstring, and wide-signature campaigns were completed on 2026-10-29; PLR0917 was resolved by keyword-only conversions, and PLR0913 was deselected outright on 2026-11-24 with its 27 waivers removed.)
+
+## Naming decisions (pending)
+
+Names that no longer match what the thing is; none is executed yet — each needs a rename decision (including hard-rename vs deprecated-alias policy) before the next release.
+
+- `RegressorKS` (`raddest/api/fitter.py`): despite the name it is the general distribution-distance grid-search regressor — the comparison statistic is decided by `compare_constructor` (its own docstring says subclasses replace it to fit against a different distribution distance; `RegressorEnergyPT` already subclasses it). Candidate: `RegressorGrid`, naming the shared zoom-in-grid strategy alongside `RegressorML` / `RegressorEnergyPT` / `RegressorEnergyGrad`. Blast radius: `fitter.py` (definition, bases of `LogLinearKS` / `LinearKS` / `RegressorEnergyPT`, two docstrings), `test/test_fitter_ml.py` (4 uses + `TestRegressorKSInit`), `test/test_energy_regressors.py` (import + one isinstance); not referenced in README, notebooks, or the shipped skill.
+- `raddest/api/post_processer.py`: misspelling of `post_processor` (module filename; public functions `post_shift`, `get_shift`). Blast radius: the module file, `test/test_post_processer.py` (import + filename), `test/test_api_extras.py` (import).
+- `raddest/reg/ks.py`: module name binds to KS but hosts statistic-agnostic machinery shared by all regressor families — `linear_scatter` / `loglinear_scatter` / `loglinear_scatter_student_t` (used by the ML, EnergyPT, and EnergyGrad regressors), the `gen_xy_obs_*` generators, `parser_anylinear`, `print_mean_std_loglinear` — alongside the actual KS comparators (`compare_loglinear`, `get_ks_reg_loglinear`). Candidate: split generation/scatter helpers from the KS comparators, or rename. Larger churn than the two above; decide together with the `RegressorKS` rename.
+- Checked and found accurate: `ks_test` / `energy_test` methods (each is the named statistic), `RegressorEnergyPT` / `LogLinearEnergyPT` (permutation test), `RegressorEnergyGrad`, the `RegressorML` family (maximum likelihood), `_PositiveSigmaGridMixin`, `FlowVI`, the `Transfer` subclasses. `GaussHermiteQuadrature.py` uses a CamelCase filename (PEP 8 wants lowercase) — cosmetic; fold into any rename round.
