@@ -51,9 +51,7 @@ def grid_search(
     return parser(res, iargs)
 
 
-# PLR0913 (12 args) waived here: the search driver carries the machinery
-# quartet, two callbacks, and five loop controls — one slot each.
-def zoom_in_grid(  # noqa: PLR0913
+def zoom_in_grid(
                  func: Callable,
                  params: list,
                  w_index: int,

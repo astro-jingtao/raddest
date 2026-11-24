@@ -141,10 +141,7 @@ def _flow_p(
     return p.reshape(shape)
 
 
-# PLR0913 (20 args) waived here: per-observation integration interface; every
-# parameter is a distinct physical knob (two axes x/y x two quantities obs/err
-# x two flows x two transfers), grouping would hide the symmetry.
-def get_xyw_trans(x_obs: ArrayLike,  # noqa: PLR0913
+def get_xyw_trans(x_obs: ArrayLike,
                   y_obs: ArrayLike,
                   x_err: ArrayLike,
                   y_err: ArrayLike,

@@ -194,7 +194,7 @@ class RegressorBase:
 
         return x_obs_gen, y_obs_gen, x_err_gen, y_err_gen, x_gen, y_gen
 
-    def ks_test(  # noqa: PLR0913 — model params, observed pair, and the three test controls plus four generation ranges
+    def ks_test(
                 self,
                 params: ArrayLike,
                 x_obs: np.ndarray,
@@ -281,7 +281,7 @@ class RegressorBase:
 
         return (D_lst[0], p_lst[0]) if K == 1 else (D_lst, p_lst)
 
-    def energy_test(  # noqa: PLR0913 — ks_test's bundle plus the permutation count
+    def energy_test(
                     self,
                     params: ArrayLike,
                     x_obs: np.ndarray,
@@ -422,7 +422,7 @@ class RegressorML(RegressorBase):
         self._v_log_posterior_ext = vmap(_log_posterior_ext,
                                          in_axes=(0, None, None, None, None))
 
-    def get_ext_data(  # noqa: PLR0913 — the data quartet plus every integration knob of get_xyw_trans
+    def get_ext_data(
                      self,
                      x_obs: ArrayLike,
                      x_err: ArrayLike,
@@ -514,7 +514,7 @@ class RegressorML(RegressorBase):
         return self._v_log_posterior_ext(self._get_v_params(params), x_ext,
                                          y_ext, w, n_sample)
 
-    def fit(  # noqa: PLR0913 — data quartet, init params, and the four optimizer controls
+    def fit(
             self,
             x_obs: ArrayLike,
             x_err: ArrayLike,
@@ -584,7 +584,7 @@ class RegressorML(RegressorBase):
 
         return params_grid, weight
 
-    def get_posterior_mcmc(  # noqa: PLR0913 — data quartet, sampler state, and the emcee controls
+    def get_posterior_mcmc(
                            self,
                            x_obs: ArrayLike,
                            x_err: ArrayLike,
@@ -1071,7 +1071,7 @@ class RegressorKS(RegressorBase):
 
         return gen_new_grid_refine_kwargs
 
-    def fit(  # noqa: PLR0913 — observed pair plus the full zoom-in grid control panel
+    def fit(
             self,
             x_obs: ArrayLike,
             y_obs: ArrayLike,
@@ -1317,7 +1317,7 @@ class RegressorEnergyGrad(RegressorBase):
 
         self.func_x2y_jax = func_x2y_jax
 
-    def fit(  # noqa: PLR0913 — observed pair, init params, and the optimizer control panel
+    def fit(
             self,
             x_obs: ArrayLike,
             y_obs: ArrayLike,
@@ -1491,7 +1491,7 @@ class RegressorEnergyPT(RegressorKS):
         Zoom-in grid regeneration scheme. Default is 'mean_std'.
     """
 
-    def __init__(self,  # noqa: PLR0913 — RegressorKS's bundle plus the energy compare controls
+    def __init__(self,
                  xflow: FlowVI,
                  yflow: FlowVI,
                  func_x2y: Callable,

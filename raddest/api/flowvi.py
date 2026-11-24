@@ -89,7 +89,7 @@ class FlowVI:
 
         return new_cls
 
-    def fit(  # noqa: PLR0913 — the observation pair plus the full nf_fit_general control panel
+    def fit(
             self,
             x_obs: ArrayLike,
             x_err: ArrayLike,
@@ -312,7 +312,7 @@ class FlowVI:
         return log_likelihood([self.flow._params[0], self.flow._params[1]],
                               u_ext, v_ext, w)
 
-    def ks_test(  # noqa: PLR0913 — observed pair plus the three test controls and four generation ranges
+    def ks_test(
                 self,
                 x_obs: ArrayLike,
                 x_err: ArrayLike,

@@ -393,9 +393,7 @@ def energy_test_jax(
     return float(test_stat), float(p_value)
 
 
-# PLR0913 (10 args) waived here: mirrors construct_ks_compare's data bundle —
-# the generator with its four sample arrays plus the observed pair.
-def construct_energy_compare(  # noqa: PLR0913
+def construct_energy_compare(
     generator_cond: Callable,
     x_gen: np.ndarray,
     x_obs_gen: np.ndarray,
@@ -465,9 +463,7 @@ def construct_energy_compare(  # noqa: PLR0913
     return energy_compare
 
 
-# PLR0913 (11 args) waived here: the batch grid backend carries the same data
-# bundle as construct_energy_compare plus its y bounds and rng controls.
-def construct_energy_compare_jax(  # noqa: PLR0913
+def construct_energy_compare_jax(
     func_x2y_jax: Callable,
     x_obs: np.ndarray,
     y_obs: np.ndarray,
@@ -628,9 +624,7 @@ def match_y_err_jax(
     return matched.reshape(-1)[:n]
 
 
-# PLR0913 (10 args) waived here: the gradient-fitting twin of the compare
-# bundle — callable, four sample arrays, y bounds, and the rng seed.
-def construct_energy_loss(  # noqa: PLR0913
+def construct_energy_loss(
     func_x2y_jax: Callable,
     x_obs: np.ndarray,
     y_obs: np.ndarray,

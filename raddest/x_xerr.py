@@ -25,10 +25,7 @@ from .tools import get_ext_w, get_ext_w_inter_grid, get_ext_w_qmc, transform_dat
 from .transfer import LogRotation, NegLogPlus, NegLogPlusXShift, Transfer, XShiftNegLogPlus
 
 
-# PLR0913 (13 args) waived here: the training loop carries its data triple,
-# the flow parameter state, the optimizer with its two compiled callables,
-# and the five convergence controls — one slot each.
-def nf_fit_frame(  # noqa: PLR0913
+def nf_fit_frame(
         u_ext: jax.Array,
         v_ext: jax.Array,
         w: jax.Array,
@@ -163,9 +160,7 @@ def construct_nf_fit_func(optimizer: optax.GradientTransformation,
     return update_params, log_likelihood
 
 
-# PLR0913 (10 args) waived here: the observation pair, four range bounds,
-# and the integration and transform controls each name one physical input.
-def construct_x_xerr_w(  # noqa: PLR0913
+def construct_x_xerr_w(
         x_obs: ArrayLike,
         x_err: ArrayLike,
         *,
@@ -239,9 +234,7 @@ def get_uv_min_max(
 
 
 # TODO: Tweedie's formula
-# PLR0913 (15 args) waived here: the observation pair plus the flow
-# initialization guess, bounds, shrinkage, and transform controls.
-def flow_params_init(  # noqa: PLR0913
+def flow_params_init(
         x_obs: ArrayLike,
         x_err: ArrayLike,
         *,
@@ -350,9 +343,7 @@ def nf_fit_trans_log_rotation(
                           **kwargs)
 
 
-# PLR0913 (26 args) waived here: the flow-fitting front door — every keyword
-# is one orthogonal training/initialization/integration control.
-def nf_fit_general(  # noqa: PLR0913
+def nf_fit_general(
         x_obs: ArrayLike,
         x_err: ArrayLike,
         *,
@@ -452,9 +443,7 @@ def nf_fit_general(  # noqa: PLR0913
     return flow, loss, transfer_params
 
 
-# PLR0913 (9 args) waived here: the flow plus its sample size, four range
-# bounds, and the transform pair.
-def gen_xobs_trans(  # noqa: PLR0913
+def gen_xobs_trans(
         flow: Flow,
         N: int,
         *,

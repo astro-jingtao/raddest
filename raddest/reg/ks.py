@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pzflow import Flow
 
 
-def gen_xy_obs_prepare(flowx: Flow,  # noqa: PLR0913 — one parameter per physical input: two flows x four range bounds x two transfers plus sampling size and output dtype
+def gen_xy_obs_prepare(flowx: Flow,
                        flowy: Flow,
                        *,
                        x_range: tuple[float, float],
@@ -135,7 +135,7 @@ def loglinear_x2y(
     return x_obs, y_obs_pred
 
 
-def gen_xy_obs_loglinear(flowx: Flow,  # noqa: PLR0913 — gen_xy_obs_prepare's twelve inputs plus the (k, b, sig) model triple and the return_more switch
+def gen_xy_obs_loglinear(flowx: Flow,
                          flowy: Flow,
                          *,
                          x_range: tuple[float, float],
@@ -188,9 +188,7 @@ def gen_xy_obs_loglinear(flowx: Flow,  # noqa: PLR0913 — gen_xy_obs_prepare's 
     return x_obs_gen, y_obs_gen, x_gen, y_gen, x_err_gen, y_err_gen
 
 
-# PLR0913 (13 args) waived here: gen_xy_obs_loglinear with the two transfers
-# fixed to NegLogPlus, so it carries their params instead.
-def gen_xy_obs_loglinear_neglogplus(  # noqa: PLR0913
+def gen_xy_obs_loglinear_neglogplus(
     flowx: Flow,
     flowy: Flow,
     *,
@@ -226,10 +224,7 @@ def gen_xy_obs_loglinear_neglogplus(  # noqa: PLR0913
                                 return_numpy=return_numpy)
 
 
-# PLR0913 (9 args) waived here: the four generated-sample arrays plus the
-# model triple and the two observed reference arrays are the comparison's
-# complete data bundle.
-def get_ks_reg_loglinear(  # noqa: PLR0913
+def get_ks_reg_loglinear(
     x_gen: ArrayLike,
     x_obs_gen: ArrayLike,
     y_kdt: ArrayLike,
@@ -253,7 +248,7 @@ def get_ks_reg_loglinear(  # noqa: PLR0913
                   n_jobs=n_jobs)
 
 
-def compare_loglinear(k: float,  # noqa: PLR0913 — the (k, b, sig) model triple plus the six-sample KS comparison bundle and its two bootstrap controls
+def compare_loglinear(k: float,
                       b: float,
                       sig: float,
                       *,

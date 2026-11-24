@@ -22,7 +22,7 @@ def construct_trainer(
 ) -> Callable:
     '''Build the gradient-descent loop running ``step`` until convergence.'''
 
-    def trainer(params: tuple,  # noqa: PLR0913 — optimizer loop state plus its four convergence/print controls, one slot each
+    def trainer(params: tuple,
                 x_ext: jnp.ndarray,
                 y_ext: jnp.ndarray,
                 w: jnp.ndarray,

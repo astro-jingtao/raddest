@@ -36,7 +36,7 @@ def get_saturated_pars(
     return n0, n1, m0, m1
 
 
-def saturated_linear(x: ArrayLike,  # noqa: PLR0913 — the saturated-linear model parameter tuple plus its four precomputed overrides; every entry is a distinct model knob
+def saturated_linear(x: ArrayLike,
                      *,
                      k: float,
                      b: float,

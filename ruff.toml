@@ -89,7 +89,10 @@ select = [
     # Function-size and interface-complexity checks.
     "PLR0911",  # too many return statements
     "PLR0912",  # too many branches
-    "PLR0913",  # too many arguments
+    # PLR0913 (too many arguments) is NOT selected: scientific estimator and
+    # training interfaces in this repo legitimately carry one slot per
+    # physical knob (data bundle + ranges + model params + controls); the 27
+    # blanket waivers the rule forced showed it does not fit here.
     # PLR0914 (too many local variables) is preview-gated in current ruff: with
     # preview = false it emits a no-effect warning on every run. Commented out,
     # not removed — re-enable by uncommenting once the rule leaves preview.
@@ -217,7 +220,7 @@ max-complexity = 10
 [lint.pylint]
 # Maintainability limits for individual functions. These do not limit the total
 # number of lines in a Python file; file-length checks require another tool.
-max-args = 8
+# (max-args removed together with the PLR0913 deselection above.)
 max-positional-args = 5
 max-returns = 6
 max-branches = 12
@@ -244,13 +247,13 @@ convention = "numpy"
 # docstring requirements and some signature/annotation limits.
 "test/**" = [
     "D100", "D101", "D102", "D103", "D104", "D107", "D417",
-    "PLR0913", "PLR0917",
+    "PLR0917",
     "ANN001", "ANN201", "ANN202",
     "E402",  # CUDA/JAX env vars are set before imports on purpose
 ]
 "**/test_*.py" = [
     "D100", "D101", "D102", "D103", "D104", "D107", "D417",
-    "PLR0913", "PLR0917",
+    "PLR0917",
     "ANN001", "ANN201", "ANN202",
     "E402",
 ]
