@@ -4,6 +4,7 @@
 
 ### Added
 
+- Example notebook `example/fit_loglinear_energy_pt_jax.ipynb`: `LogLinearEnergyPT(backend='jax')` at GPU scale — 200 permutations per grid point, a 2000-point synthetic sample at every point, full zoom-in plus refinement (whole fit ~13 s on one GPU), with goodness-of-fit and model-vs-data checks.
 - Cross-backend parity tests for the jax and numpy engines: same-data statistic/p-value agreement of `energy_test` vs `energy_test_jax` (identical samples, fully shifted samples, same-distribution p-values within Monte-Carlo noise, asymmetric sample splits), the numpy grid compare vs the jax grid compare on identical inputs (the jax statistic must fall inside the numpy noise-realization band), and a `LogLinearEnergyPT` fit through both backends on shared flows and data (grid points identical, stat columns correlated > 0.995, `params_mean`/`params_std` agreeing within calibrated tolerances).
 
 ### Changed
