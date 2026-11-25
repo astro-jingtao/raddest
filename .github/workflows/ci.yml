@@ -42,8 +42,12 @@ jobs:
             python-version: '3.13'
           - os: macos-latest
             python-version: '3.13'
-          - os: windows-latest
-            python-version: '3.13'
+          # No windows leg: the ndtest git dependency's f2py build cannot be
+          # satisfied here — its setup.py unconditionally moves a `.libs`
+          # directory that the meson f2py backend (forced on py3.12+ and
+          # setuptools>=74, i.e. every current runner) never creates. The fix
+          # belongs to ndtest's packaging; restore this leg once ndtest builds
+          # under the meson backend on Windows.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,26 +57,24 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v gfortran || brew install gfortran
 
-      - name: Install a Fortran compiler (Windows, for the ndtest f2py build)
-        if: runner.os == 'Windows'
-        run: choco install mingw -y --no-progress
-
       - name: Install package and test dependencies
         # CPU-only jax: no CUDA wheels needed, the extra keeps the runners light.
         # ndtest (the git dependency) imports numpy in its setup.py and has no
-        # pyproject.toml, so pip >= 25.3 builds it in an isolated env where
-        # numpy is absent; pre-install it with --no-build-isolation against the
-        # outer numpy, and the -r step then finds it already satisfied. Its f2py
-        # extension takes the meson backend on py3.12+ / setuptools>=74, hence
-        # meson and ninja; the Fortran compilers come from the runner image
-        # (Linux/macOS) or the steps above (Windows). numpy's f2py opens
-        # Fortran sources as ASCII unless charset_normalizer is installed, and
-        # maxdist.f90 carries a UTF-8 comment — hence the last extra.
+        # pyproject.toml, so an isolated build env has neither numpy (its import
+        # fails at metadata time) nor a way to read maxdist.f90's UTF-8 comment
+        # (numpy's f2py opens sources as ASCII unless charset_normalizer is
+        # installed). Everything therefore builds with --no-build-isolation
+        # against the pre-installed tools: numpy, charset_normalizer, meson and
+        # ninja for the f2py extension (meson backend on py3.12+ /
+        # setuptools>=74; the Fortran compiler comes from the runner image),
+        # and pted's hatchling build requirements. pip >= 25.3 rebuilds the
+        # direct-URL ndtest requirement from requirements-dev.txt even after the
+        # pre-install, so the last command must carry the flag too.
         run: |
           python -m pip install --upgrade pip
-          pip install numpy setuptools wheel meson ninja charset_normalizer
+          pip install numpy setuptools wheel meson ninja charset_normalizer hatchling hatch-requirements-txt hatch-vcs
           pip install --no-build-isolation "ndtest @ git+https://github.com/astro-jingtao/ndtest"
-          pip install -e . -r requirements-dev.txt
+          pip install --no-build-isolation -e . -r requirements-dev.txt
       - name: Run fast test subset
         # CI runners have no GPU and 2 cores; the slow marker excludes the
         # end-to-end fitting tests (flow training, grid searches, gradient
