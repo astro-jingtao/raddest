@@ -65,10 +65,12 @@ jobs:
         # outer numpy, and the -r step then finds it already satisfied. Its f2py
         # extension takes the meson backend on py3.12+ / setuptools>=74, hence
         # meson and ninja; the Fortran compilers come from the runner image
-        # (Linux/macOS) or the steps above (Windows).
+        # (Linux/macOS) or the steps above (Windows). numpy's f2py opens
+        # Fortran sources as ASCII unless charset_normalizer is installed, and
+        # maxdist.f90 carries a UTF-8 comment — hence the last extra.
         run: |
           python -m pip install --upgrade pip
-          pip install numpy setuptools wheel meson ninja
+          pip install numpy setuptools wheel meson ninja charset_normalizer
           pip install --no-build-isolation "ndtest @ git+https://github.com/astro-jingtao/ndtest"
           pip install -e . -r requirements-dev.txt
       - name: Run fast test subset
