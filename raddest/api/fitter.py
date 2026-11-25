@@ -26,6 +26,8 @@ from raddest.grid_search import (
     gen_new_grid_quantile,
     get_weighted_res,
     grid_search,
+    parser_anylinear,
+    print_mean_std_loglinear,
     zoom_in_grid,
 )
 from raddest.reg.constructor import (
@@ -53,13 +55,11 @@ from raddest.reg.func_jax import (
     saturated_linear_smooth_jax,
 )
 from raddest.reg.map import get_w_add_lognorm, get_xyw_trans
-from raddest.reg.scatter import (
+from raddest.reg.mock import (
     gen_xy_obs_prepare,
     linear_scatter,
     loglinear_scatter,
     loglinear_scatter_student_t,
-    parser_anylinear,
-    print_mean_std_loglinear,
 )
 
 if TYPE_CHECKING:

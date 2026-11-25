@@ -1,5 +1,7 @@
 """Grid-search machinery: weighted result summaries, parallel or batched
-grid evaluation, zoom-in iteration, and new-grid generators."""
+grid evaluation, zoom-in iteration, new-grid generators, and the
+(k, b, sig)-family result parser/printer helpers plugged into the
+``parser``/``print_mean_std`` slots."""
 
 from __future__ import annotations
 
@@ -25,6 +27,29 @@ def get_weighted_res(
         _mean.append(w_x.mean)
         _std.append(max(w_x.std, std_min))
     return np.array(_mean), np.array(_std)
+
+
+def parser_anylinear(
+    res: list[tuple],
+    iargs: list[tuple],
+) -> np.ndarray:
+    """Stack grid results as (n_points, 5): params columns then (stat, p)."""
+    res_arr = np.zeros((len(res), 5))
+    for i, (r, a) in enumerate(zip(res, iargs)):
+        res_arr[i, :] = (*a, r[0], r[1])
+    return res_arr
+
+
+def print_mean_std_loglinear(
+    _mean: ArrayLike,
+    _std: ArrayLike,
+) -> None:
+    """Print the (k, b, sig) mean +/- std summary lines."""
+    # print res with std
+    print("----")
+    print(f"k: {_mean[0]:.3f} +/- {_std[0]:.3f}")
+    print(f"b: {_mean[1]:.3f} +/- {_std[1]:.3f}")
+    print(f"sig: {_mean[2]:.3f} +/- {_std[2]:.3f}")
 
 
 def grid_search(

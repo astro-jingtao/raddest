@@ -5,7 +5,7 @@ from raddest.reg.ks import (
     compare_loglinear,
     get_ks_reg_loglinear,
 )
-from raddest.reg.scatter import (
+from raddest.reg.mock import (
     gen_xy_obs_loglinear,
     gen_xy_obs_loglinear_neglogplus,
     linear_scatter,

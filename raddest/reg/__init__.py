@@ -1,3 +1,3 @@
-"""Regression building blocks: scatter families and flow-sample generation,
-KS comparators, energy-test machinery, function factories, and the grid
-integration of (obs, err)."""
+"""Regression building blocks: mock-sample generation (scatter families and
+flow-pair draws), KS comparators, energy-test machinery, function factories,
+and the grid integration of (obs, err)."""

@@ -6,7 +6,7 @@ from __future__ import annotations
 from ndtest.ksnd import ks2d2s
 from numpy.typing import ArrayLike
 
-from raddest.reg.scatter import loglinear_generator_cond
+from raddest.reg.mock import loglinear_generator_cond
 
 
 def get_ks_reg_loglinear(

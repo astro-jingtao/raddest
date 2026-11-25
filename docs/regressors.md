@@ -75,6 +75,6 @@ classDiagram
 ## Where the pieces live
 
 - `raddest.api.fitter` — the classes above.
-- `raddest.reg.scatter` — scatter families, conditional generators, flow-pair draws, grid parser/printer helpers (statistic-agnostic, shared by all strategies).
+- `raddest.reg.mock` — scatter families, conditional generators, flow-pair mock draws (statistic-agnostic, shared by all strategies); the `(k, b, sig)` grid parser/printer helpers live with the grid machinery in `raddest.grid_search`.
 - `raddest.reg.ks` — the KS comparators; `raddest.reg.energy` — the energy distance/test and its compare/loss constructors.
 - `raddest.reg.constructor` — likelihood/step/generator factories; `raddest.reg.map` — the (obs, err) grid integration; `raddest.reg.func(_jax)` — the model functions and their jax twins.

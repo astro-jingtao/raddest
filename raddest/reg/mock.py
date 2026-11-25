@@ -1,7 +1,7 @@
-"""Scatter families and flow-sample generation shared by all regressor
-strategies: log/linear scatter draws, the conditional generators built from
-them, full mock-observation draws from the two flows, and the grid-result
-parser/printer helpers over the (k, b, sig) family."""
+"""Mock-sample generation for the (k, b, sig) model families, shared by all
+regressor strategies: the scatter noise families and the conditional
+generators built from them, and the full mock-observation draws from a pair
+of axis flows."""
 
 from __future__ import annotations
 
@@ -236,26 +236,3 @@ def gen_xy_obs_loglinear_neglogplus(
         y_transfer_params=y_transfer_params,
         return_numpy=return_numpy,
     )
-
-
-def parser_anylinear(
-    res: list[tuple],
-    iargs: list[tuple],
-) -> np.ndarray:
-    """Stack grid results as (n_points, 5): params columns then (stat, p)."""
-    res_arr = np.zeros((len(res), 5))
-    for i, (r, a) in enumerate(zip(res, iargs)):
-        res_arr[i, :] = (*a, r[0], r[1])
-    return res_arr
-
-
-def print_mean_std_loglinear(
-    _mean: ArrayLike,
-    _std: ArrayLike,
-) -> None:
-    """Print the (k, b, sig) mean +/- std summary lines."""
-    # print res with std
-    print("----")
-    print(f"k: {_mean[0]:.3f} +/- {_std[0]:.3f}")
-    print(f"b: {_mean[1]:.3f} +/- {_std[1]:.3f}")
-    print(f"sig: {_mean[2]:.3f} +/- {_std[2]:.3f}")
