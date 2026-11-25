@@ -34,7 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # ubuntu-24.04 pinned: ubuntu-latest (26.04) has no setup-python
+          # distribution for 3.9 any more.
+          - os: ubuntu-24.04
             python-version: '3.9'
           - os: ubuntu-latest
             python-version: '3.13'
@@ -47,10 +49,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Ensure a Fortran compiler (macOS, for the ndtest f2py build)
+        if: runner.os == 'macOS'
+        run: command -v gfortran || brew install gfortran
+
+      - name: Install a Fortran compiler (Windows, for the ndtest f2py build)
+        if: runner.os == 'Windows'
+        run: choco install mingw -y --no-progress
+
       - name: Install package and test dependencies
-        # CPU-only jax: no CUDA wheels needed, the extra keeps the runners light
+        # CPU-only jax: no CUDA wheels needed, the extra keeps the runners light.
+        # ndtest (the git dependency) imports numpy in its setup.py and has no
+        # pyproject.toml, so pip >= 25.3 builds it in an isolated env where
+        # numpy is absent; pre-install it with --no-build-isolation against the
+        # outer numpy, and the -r step then finds it already satisfied. Its f2py
+        # extension takes the meson backend on py3.12+ / setuptools>=74, hence
+        # meson and ninja; the Fortran compilers come from the runner image
+        # (Linux/macOS) or the steps above (Windows).
         run: |
           python -m pip install --upgrade pip
+          pip install numpy setuptools wheel meson ninja
+          pip install --no-build-isolation "ndtest @ git+https://github.com/astro-jingtao/ndtest"
           pip install -e . -r requirements-dev.txt
       - name: Run fast test subset
         # CI runners have no GPU and 2 cores; the slow marker excludes the
