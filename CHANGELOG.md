@@ -12,6 +12,7 @@
 
 ### Changed
 
+- The KDE evaluation inside the `(obs, err)` integration (`raddest.reg.map.get_xyw_trans`) batches by default (`kde_batch_size=None` now means a bounded batch instead of one call over all points): with numpy >= 2 the unbatched evaluation materializes a ~28 GB pairwise buffer inside XLA on CPU (the 20000-point KDE dataset against the integration grid) where the GPU path fuses it away; the batched default keeps the buffer ~1.6 GB with identical results.
 - The repo's last `ruff` finding — the `F821` on `PiecewiseLogLinearStudentTML`'s not-yet-implemented `piecewise_linear_studentT_step_factory` — is silenced with a reasoned `# noqa: F821` at the site, so `ruff check` passes clean; implementing or removing the dead-code pair (with `MyPchipInterpolator`'s unreachable inverse, which ruff cannot see) stays deferred in TODO.md.
 - `RegressorKS` is split into `RegressorGrid` — the statistic-agnostic zoom-in grid machinery, whose `compare_constructor` now defaults to None with a clear `fit` error when no statistic is bound — and a thin KS-specific `RegressorKS(RegressorGrid)` layer binding `construct_ks_compare`. `LogLinearKS`/`LinearKS` inherit the KS layer (behavior unchanged), and `RegressorEnergyPT` inherits `RegressorGrid` directly instead of riding the KS name. The `fit` docstring's statistic references are neutralized accordingly.
 - `raddest.api.post_processer` is renamed to `raddest.api.post_processor` (the module filename was misspelled); the test file renames with it.

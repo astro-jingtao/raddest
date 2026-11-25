@@ -171,6 +171,7 @@ def get_xyw_trans(
     Here x_range, x_err_range, y_range, y_err_range are for original varibles, not transformed ones.
 
     get_w_add: callable, (x_ext, y_ext, x_err_ext, y_err_ext) -> w_add, additional weight for each point.
+    kde_batch_size: KDE evaluation batch (points per call); None uses a bounded default.
     """
 
     # x, x_err | y, y_err <-> u, v
@@ -219,11 +220,13 @@ def get_xyw_trans(
         kernel_y = gaussian_kde(y_sample)
 
         if kde_batch_size is None:
-            py = kernel_y.pdf(_y_ext.flatten()).reshape(s1, s2)
-        else:
-            py = kde_pdf_batch(kernel_y, _y_ext.flatten(), batch_size=kde_batch_size).reshape(
-                s1, s2
-            )
+            # Unbatched evaluation materializes the full (n_points, n_dataset)
+            # pairwise buffer inside XLA: ~28 GB for the 20000-point KDE
+            # dataset against 176400 integration points (numpy >= 2 builds it
+            # eagerly on CPU where XLA cannot fuse it away). A bounded default
+            # batch keeps the buffer ~1.6 GB on every backend; identical math.
+            kde_batch_size = 10000
+        py = kde_pdf_batch(kernel_y, _y_ext.flatten(), batch_size=kde_batch_size).reshape(s1, s2)
 
         py_yerr = _flow_p(flowy, uy_ext, vy_ext, (s1, s2), flow_batch_size)
         if y_transfer is not None:
