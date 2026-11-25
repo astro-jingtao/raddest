@@ -23,7 +23,9 @@ def cuda_device_from_argv(argv):
 # is read straight off the command line here; pytest_addoption below registers
 # it for --help and in-test lookup only.
 os.environ["CUDA_VISIBLE_DEVICES"] = cuda_device_from_argv(sys.argv)
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "1"
+# Full-device preallocation by default (exclusive-GPU runs); an externally
+# exported fraction wins so the suite can share a busy GPU.
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "1")
 
 import jax.numpy as jnp
 import numpy as np
