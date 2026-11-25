@@ -1,12 +1,13 @@
 # Development and test dependencies (not needed to install or use raddest).
 # pted is the reference implementation the energy-distance parity tests run
-# against (raddest/reg/energy.py); a reference-implementation major version is
-# pinned because its API is the contract the parity tests encode — pted 2.0
-# removed pted_chunk_numpy and needs its own parity-test update first.
+# against (raddest/reg/energy.py). A reference implementation is pinned to the
+# exact version the parity tests were calibrated against — its API AND numbers
+# are the contract; pted >= 1.5 removed pted_chunk_numpy, and upgrading needs
+# its own parity-test update first.
 pytest
 pytest-cov
 ruff
-pted<2
+pted==1.4.1
 # fitter.py imports ndtest unconditionally; it is not on PyPI.
 ndtest @ git+https://github.com/astro-jingtao/ndtest
 # git filter that normalizes *.ipynb on add (keep code+outputs); see README.
